@@ -199,12 +199,117 @@ class BaseDevice:
         
     def _run(self):
         pass
-        
-    def capture_packet(self, direction: str, size: int, remote_addr: tuple, protocol_info: str = ""):
-        """Capture packet details for display"""
+
+    def _build_pcap_packet(self, src_ip: str, src_port: int, dst_ip: str, dst_port: int, payload: bytes) -> bytes:
+        """Build a complete Ethernet/IP/TCP packet for PCAP export"""
+
+        # Ethernet header (14 bytes)
+        # Destination MAC (6 bytes) - use dummy MAC addresses
+        dst_mac = b'\x00\x00\x00\x00\x00\x00'
+        # Source MAC (6 bytes)
+        src_mac = b'\x00\x00\x00\x00\x00\x01'
+        # EtherType: 0x0800 for IPv4
+        ethertype = b'\x08\x00'
+        ethernet_header = dst_mac + src_mac + ethertype
+
+        # IP header (20 bytes minimum)
+        ip_version = 4
+        ip_ihl = 5  # Internet Header Length (5 * 4 = 20 bytes)
+        ip_ver_ihl = (ip_version << 4) + ip_ihl
+        ip_tos = 0  # Type of Service
+        ip_len = 20 + 20 + len(payload)  # IP header + TCP header + payload
+        ip_id = random.randint(0, 65535)
+        ip_frag = 0  # No fragmentation
+        ip_ttl = 64
+        ip_proto = 6  # TCP protocol
+        ip_checksum = 0  # Will be calculated
+
+        # Convert IP addresses to bytes
+        src_ip_bytes = socket.inet_aton(src_ip)
+        dst_ip_bytes = socket.inet_aton(dst_ip)
+
+        # Build IP header without checksum
+        ip_header = struct.pack('!BBHHHBBH', ip_ver_ihl, ip_tos, ip_len, ip_id,
+                                ip_frag, ip_ttl, ip_proto, ip_checksum)
+        ip_header += src_ip_bytes + dst_ip_bytes
+
+        # Calculate IP checksum
+        ip_checksum = self._calculate_checksum(ip_header)
+        # Rebuild IP header with correct checksum
+        ip_header = struct.pack('!BBHHHBBH', ip_ver_ihl, ip_tos, ip_len, ip_id,
+                                ip_frag, ip_ttl, ip_proto, ip_checksum)
+        ip_header += src_ip_bytes + dst_ip_bytes
+
+        # TCP header (20 bytes minimum)
+        tcp_src_port = src_port
+        tcp_dst_port = dst_port
+        tcp_seq = random.randint(0, 4294967295)
+        tcp_ack = 0
+        tcp_offset = 5  # Data offset (5 * 4 = 20 bytes)
+        tcp_flags = 0x18  # PSH + ACK flags
+        tcp_window = 65535
+        tcp_checksum = 0  # Will be calculated
+        tcp_urgent = 0
+
+        tcp_header = struct.pack('!HHLLBBHHH', tcp_src_port, tcp_dst_port, tcp_seq,
+                                 tcp_ack, (tcp_offset << 4), tcp_flags, tcp_window,
+                                 tcp_checksum, tcp_urgent)
+
+        # Calculate TCP checksum with pseudo header
+        pseudo_header = src_ip_bytes + dst_ip_bytes + struct.pack('!BBH', 0, ip_proto,
+                                                                    len(tcp_header) + len(payload))
+        tcp_checksum = self._calculate_checksum(pseudo_header + tcp_header + payload)
+
+        # Rebuild TCP header with correct checksum
+        tcp_header = struct.pack('!HHLLBBHHH', tcp_src_port, tcp_dst_port, tcp_seq,
+                                 tcp_ack, (tcp_offset << 4), tcp_flags, tcp_window,
+                                 tcp_checksum, tcp_urgent)
+
+        # Combine all headers and payload
+        return ethernet_header + ip_header + tcp_header + payload
+
+    def _calculate_checksum(self, data: bytes) -> int:
+        """Calculate Internet checksum (RFC 1071)"""
+        checksum = 0
+        # Handle odd-length data
+        data_len = len(data)
+        if data_len % 2 == 1:
+            data += b'\x00'
+            data_len += 1
+
+        # Sum all 16-bit words
+        for i in range(0, data_len, 2):
+            word = (data[i] << 8) + data[i + 1]
+            checksum += word
+
+        # Fold 32-bit sum to 16 bits
+        while checksum >> 16:
+            checksum = (checksum & 0xFFFF) + (checksum >> 16)
+
+        # One's complement
+        return ~checksum & 0xFFFF
+
+    def capture_packet(self, direction: str, size: int, remote_addr: tuple, protocol_info: str = "", raw_data: bytes = b""):
+        """Capture packet details and raw data for PCAP export"""
         # Check if capture is enabled
         if self.scada_server and not self.scada_server.capture_enabled:
             return None
+
+        # Build complete packet with Ethernet/IP/TCP headers
+        pcap_packet = b""
+        if raw_data and remote_addr:
+            # Determine source and destination based on direction
+            if direction == 'RX':
+                # Received: remote -> local
+                src_ip, src_port = remote_addr[0], remote_addr[1]
+                dst_ip, dst_port = self.ip, self.port
+            else:
+                # Transmitted: local -> remote
+                src_ip, src_port = self.ip, self.port
+                dst_ip, dst_port = remote_addr[0], remote_addr[1]
+
+            # Build complete packet with all headers
+            pcap_packet = self._build_pcap_packet(src_ip, src_port, dst_ip, dst_port, raw_data)
 
         packet_data = {
             'timestamp': datetime.now(),
@@ -214,7 +319,9 @@ class BaseDevice:
             'size': size,
             'local_addr': f"{self.ip}:{self.port}",
             'remote_addr': f"{remote_addr[0]}:{remote_addr[1]}" if remote_addr else "N/A",
-            'protocol_info': protocol_info
+            'protocol_info': protocol_info,
+            'raw_data': raw_data,  # Store application layer data
+            'pcap_packet': pcap_packet  # Store complete packet with headers
         }
         self.captured_packets.append(packet_data)
         return packet_data
@@ -304,7 +411,7 @@ class ModbusRTU(BaseDevice):
 
                     # Capture received packet
                     protocol_info = f"Modbus FC={function_code:02X} TID={transaction_id}"
-                    self.capture_packet('RX', len(data), addr, protocol_info)
+                    self.capture_packet('RX', len(data), addr, protocol_info, data)
 
                     logger.debug(f"Modbus request: FC={function_code}, TID={transaction_id}")
 
@@ -322,7 +429,7 @@ class ModbusRTU(BaseDevice):
                         self.traffic_stats['packets_sent'] += 1
                         self.traffic_stats['bytes_sent'] += len(response)
                         # Capture sent packet
-                        self.capture_packet('TX', len(response), addr, f"Modbus Response FC={function_code:02X}")
+                        self.capture_packet('TX', len(response), addr, f"Modbus Response FC={function_code:02X}", response)
                         
             conn.close()
         except Exception as e:
@@ -438,7 +545,7 @@ class DNP3RTU(BaseDevice):
                 self.traffic_stats['packets_received'] += 1
                 self.traffic_stats['bytes_received'] += len(data)
                 # Capture received packet
-                self.capture_packet('RX', len(data), addr, "DNP3 Request")
+                self.capture_packet('RX', len(data), addr, "DNP3 Request", data)
 
                 if len(data) >= 10:
                     response = self._create_dnp3_response()
@@ -447,7 +554,7 @@ class DNP3RTU(BaseDevice):
                     self.traffic_stats['packets_sent'] += 1
                     self.traffic_stats['bytes_sent'] += len(response)
                     # Capture sent packet
-                    self.capture_packet('TX', len(response), addr, "DNP3 Response")
+                    self.capture_packet('TX', len(response), addr, "DNP3 Response", response)
                     
             conn.close()
         except Exception as e:
@@ -537,7 +644,7 @@ class S7RTU(BaseDevice):
                 self.traffic_stats['packets_received'] += 1
                 self.traffic_stats['bytes_received'] += len(data)
                 # Capture received packet
-                self.capture_packet('RX', len(data), addr, "S7comm Request")
+                self.capture_packet('RX', len(data), addr, "S7comm Request", data)
 
                 response = self._create_s7_response(data)
                 conn.send(response)
@@ -545,7 +652,7 @@ class S7RTU(BaseDevice):
                 self.traffic_stats['packets_sent'] += 1
                 self.traffic_stats['bytes_sent'] += len(response)
                 # Capture sent packet
-                self.capture_packet('TX', len(response), addr, "S7comm Response")
+                self.capture_packet('TX', len(response), addr, "S7comm Response", response)
                 
             conn.close()
         except Exception as e:
@@ -630,7 +737,7 @@ class RockwellPLC(BaseDevice):
                 self.traffic_stats['packets_received'] += 1
                 self.traffic_stats['bytes_received'] += len(data)
                 # Capture received packet
-                self.capture_packet('RX', len(data), addr, "EtherNet/IP Request")
+                self.capture_packet('RX', len(data), addr, "EtherNet/IP Request", data)
 
                 response = self._create_enip_response(data)
                 conn.send(response)
@@ -638,7 +745,7 @@ class RockwellPLC(BaseDevice):
                 self.traffic_stats['packets_sent'] += 1
                 self.traffic_stats['bytes_sent'] += len(response)
                 # Capture sent packet
-                self.capture_packet('TX', len(response), addr, "EtherNet/IP Response")
+                self.capture_packet('TX', len(response), addr, "EtherNet/IP Response", response)
                 
             conn.close()
         except Exception as e:
@@ -737,7 +844,7 @@ class SchneiderModicon(BaseDevice):
                     unit_id = data[6]
                     function_code = data[7]
                     # Capture received packet
-                    self.capture_packet('RX', len(data), addr, f"Modbus FC={function_code:02X}")
+                    self.capture_packet('RX', len(data), addr, f"Modbus FC={function_code:02X}", data)
 
                     response = None
                     if function_code in [0x03, 0x04]:
@@ -752,7 +859,7 @@ class SchneiderModicon(BaseDevice):
                         self.traffic_stats['packets_sent'] += 1
                         self.traffic_stats['bytes_sent'] += len(response)
                         # Capture sent packet
-                        self.capture_packet('TX', len(response), addr, f"Modbus Response FC={function_code:02X}")
+                        self.capture_packet('TX', len(response), addr, f"Modbus Response FC={function_code:02X}", response)
                         
             conn.close()
         except Exception as e:
@@ -859,7 +966,7 @@ class GEMultilin(BaseDevice):
                 self.traffic_stats['packets_received'] += 1
                 self.traffic_stats['bytes_received'] += len(data)
                 # Capture received packet
-                self.capture_packet('RX', len(data), addr, "Modbus Request")
+                self.capture_packet('RX', len(data), addr, "Modbus Request", data)
 
                 response = b'\x00\x01\x00\x00\x00\x30\x01\x2B\x0E\x01\x81\x00\x00\x02'
                 response += b'\x00\x02GE'
@@ -869,7 +976,7 @@ class GEMultilin(BaseDevice):
                 self.traffic_stats['packets_sent'] += 1
                 self.traffic_stats['bytes_sent'] += len(response)
                 # Capture sent packet
-                self.capture_packet('TX', len(response), addr, "Modbus Response")
+                self.capture_packet('TX', len(response), addr, "Modbus Response", response)
             conn.close()
         except:
             pass
@@ -909,7 +1016,7 @@ class HoneywellPLC(BaseDevice):
                         self.traffic_stats['packets_received'] += 1
                         self.traffic_stats['bytes_received'] += len(data)
                         # Capture received packet
-                        self.capture_packet('RX', len(data), addr, "Modbus Request")
+                        self.capture_packet('RX', len(data), addr, "Modbus Request", data)
 
                         response = b'\x00\x01\x00\x00\x00\x25\x01\x2B\x0E\x01\x81\x00\x00\x02'
                         response += b'\x00\x09Honeywell'
@@ -918,7 +1025,7 @@ class HoneywellPLC(BaseDevice):
                         self.traffic_stats['packets_sent'] += 1
                         self.traffic_stats['bytes_sent'] += len(response)
                         # Capture sent packet
-                        self.capture_packet('TX', len(response), addr, "Modbus Response")
+                        self.capture_packet('TX', len(response), addr, "Modbus Response", response)
                     conn.close()
                 except socket.timeout:
                     continue
@@ -962,7 +1069,7 @@ class MitsubishiPLC(BaseDevice):
                         self.traffic_stats['packets_received'] += 1
                         self.traffic_stats['bytes_received'] += len(data)
                         # Capture received packet
-                        self.capture_packet('RX', len(data), addr, "MELSEC Request")
+                        self.capture_packet('RX', len(data), addr, "MELSEC Request", data)
 
                         response = b'D0\x00' + self.model.encode('ascii')[:20].ljust(20, b'\x00')
                         response += self.firmware.encode('ascii')[:10].ljust(10, b'\x00')
@@ -970,7 +1077,7 @@ class MitsubishiPLC(BaseDevice):
                         self.traffic_stats['packets_sent'] += 1
                         self.traffic_stats['bytes_sent'] += len(response)
                         # Capture sent packet
-                        self.capture_packet('TX', len(response), addr, "MELSEC Response")
+                        self.capture_packet('TX', len(response), addr, "MELSEC Response", response)
                     conn.close()
                 except socket.timeout:
                     continue
@@ -1013,7 +1120,7 @@ class OmronPLC(BaseDevice):
                         self.traffic_stats['packets_received'] += 1
                         self.traffic_stats['bytes_received'] += len(data)
                         # Capture received packet
-                        self.capture_packet('RX', len(data), addr, "FINS Request")
+                        self.capture_packet('RX', len(data), addr, "FINS Request", data)
 
                         response = b'FINS\x00\x00\x00\x01'
                         response += self.vendor.encode('ascii')[:10].ljust(10, b'\x00')
@@ -1022,7 +1129,7 @@ class OmronPLC(BaseDevice):
                         self.traffic_stats['packets_sent'] += 1
                         self.traffic_stats['bytes_sent'] += len(response)
                         # Capture sent packet
-                        self.capture_packet('TX', len(response), addr, "FINS Response")
+                        self.capture_packet('TX', len(response), addr, "FINS Response", response)
                     conn.close()
                 except socket.timeout:
                     continue
@@ -2787,7 +2894,7 @@ class PacketsTab(QWidget):
                 f.write("\n")
 
     def _save_as_pcap(self, file_path: str, packets: List[Dict]):
-        """Save packets in PCAP format"""
+        """Save packets in PCAP format with real packet data"""
         with open(file_path, 'wb') as f:
             # Write PCAP global header
             # Magic number (0xa1b2c3d4), version (2.4), timezone (0), sigfigs (0),
@@ -2796,24 +2903,28 @@ class PacketsTab(QWidget):
 
             # Write packet records
             for packet in packets:
-                # Create pseudo packet data with metadata
-                packet_info = (
-                    f"Device: {packet['device_id']} | "
-                    f"Type: {packet['device_type']} | "
-                    f"Dir: {packet['direction']} | "
-                    f"Size: {packet['size']} | "
-                    f"Proto: {packet['protocol_info']}"
-                ).encode('utf-8')
+                # Use the complete PCAP packet if available
+                if 'pcap_packet' in packet and packet['pcap_packet']:
+                    packet_data = packet['pcap_packet']
+                else:
+                    # Fallback: Create metadata packet if no raw data captured
+                    packet_data = (
+                        f"Device: {packet['device_id']} | "
+                        f"Type: {packet['device_type']} | "
+                        f"Dir: {packet['direction']} | "
+                        f"Size: {packet['size']} | "
+                        f"Proto: {packet['protocol_info']}"
+                    ).encode('utf-8')
 
                 # Packet header: timestamp (sec, usec), captured length, original length
                 timestamp = packet['timestamp']
                 ts_sec = int(timestamp.timestamp())
                 ts_usec = timestamp.microsecond
-                caplen = len(packet_info)
-                origlen = packet['size']
+                caplen = len(packet_data)
+                origlen = len(packet_data)
 
                 f.write(struct.pack('IIII', ts_sec, ts_usec, caplen, origlen))
-                f.write(packet_info)
+                f.write(packet_data)
 
     def refresh_packets(self):
         """Refresh the packet table display"""
