@@ -29,7 +29,7 @@ from PyQt6.QtWidgets import (
     QTabWidget, QLabel, QPushButton, QTextEdit, QTableWidget,
     QTableWidgetItem, QGroupBox, QGridLayout, QSpinBox, QCheckBox,
     QComboBox, QProgressBar, QMessageBox, QLineEdit, QSplitter,
-    QHeaderView, QMenuBar, QMenu, QDialog, QDialogButtonBox
+    QHeaderView, QMenuBar, QMenu, QDialog, QDialogButtonBox, QFileDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
 from PyQt6.QtGui import QFont, QColor, QAction
@@ -1049,7 +1049,7 @@ class SCADAServer(QObject):
         super().__init__()
         self.rtus: List[BaseDevice] = []
         self.running = False
-        self.capture_enabled = True  # Packet capture enabled by default
+        self.capture_enabled = False  # Packet capture paused by default
         self.data_history = deque(maxlen=1000)
         self.update_timer = None
         # Load NVD API key from environment
@@ -2502,16 +2502,16 @@ class PacketsTab(QWidget):
         self.start_capture_btn = QPushButton("▶ Start Capture")
         self.start_capture_btn.clicked.connect(self.start_capture)
         self.start_capture_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
-        self.start_capture_btn.setEnabled(False)  # Disabled initially as capture is enabled by default
+        self.start_capture_btn.setEnabled(True)  # Enabled initially as capture is paused by default
 
         self.stop_capture_btn = QPushButton("⏸ Stop Capture")
         self.stop_capture_btn.clicked.connect(self.stop_capture)
         self.stop_capture_btn.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;")
-        self.stop_capture_btn.setEnabled(True)  # Enabled initially as capture is running by default
+        self.stop_capture_btn.setEnabled(False)  # Disabled initially as capture is paused by default
 
         # Capture status label
-        self.capture_status_label = QLabel("🟢 Capturing")
-        self.capture_status_label.setStyleSheet("color: green; font-weight: bold;")
+        self.capture_status_label = QLabel("🔴 Stopped")
+        self.capture_status_label.setStyleSheet("color: red; font-weight: bold;")
 
         self.auto_scroll_check = QCheckBox("Auto-scroll")
         self.auto_scroll_check.setChecked(True)
@@ -2523,6 +2523,10 @@ class PacketsTab(QWidget):
         self.refresh_btn = QPushButton("🔄 Refresh")
         self.refresh_btn.clicked.connect(self.refresh_packets)
 
+        self.save_pcap_btn = QPushButton("💾 Save PCAP")
+        self.save_pcap_btn.clicked.connect(self.save_pcap)
+        self.save_pcap_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
+
         self.packet_count_label = QLabel("Packets: 0")
 
         control_layout.addWidget(self.start_capture_btn)
@@ -2532,6 +2536,7 @@ class PacketsTab(QWidget):
         control_layout.addWidget(self.auto_scroll_check)
         control_layout.addWidget(self.clear_btn)
         control_layout.addWidget(self.refresh_btn)
+        control_layout.addWidget(self.save_pcap_btn)
         control_layout.addWidget(self.packet_count_label)
         control_layout.addStretch()
 
@@ -2716,6 +2721,99 @@ class PacketsTab(QWidget):
                 rtu.captured_packets.clear()
             self.current_page = 0  # Reset to first page
             self.refresh_packets()
+
+    def save_pcap(self):
+        """Save captured packets to a PCAP-style file"""
+        packets = self.scada_server.get_all_packets()
+
+        if not packets:
+            QMessageBox.information(
+                self,
+                'No Packets',
+                'No packets available to save.'
+            )
+            return
+
+        # Open file dialog
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            'Save Packet Capture',
+            f'packet_capture_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt',
+            'Text Files (*.txt);;PCAP Files (*.pcap);;All Files (*.*)'
+        )
+
+        if not file_path:
+            return
+
+        try:
+            # Determine file format based on extension
+            if file_path.endswith('.pcap'):
+                self._save_as_pcap(file_path, packets)
+            else:
+                self._save_as_text(file_path, packets)
+
+            QMessageBox.information(
+                self,
+                'Success',
+                f'Successfully saved {len(packets)} packets to {file_path}'
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                'Error',
+                f'Failed to save packets: {str(e)}'
+            )
+
+    def _save_as_text(self, file_path: str, packets: List[Dict]):
+        """Save packets as human-readable text file"""
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write("=" * 80 + "\n")
+            f.write("SCADA Network Packet Capture\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total Packets: {len(packets)}\n")
+            f.write("=" * 80 + "\n\n")
+
+            for idx, packet in enumerate(packets, 1):
+                f.write(f"Packet #{idx}\n")
+                f.write("-" * 80 + "\n")
+                f.write(f"Timestamp:     {packet['timestamp'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
+                f.write(f"Device ID:     {packet['device_id']}\n")
+                f.write(f"Device Type:   {packet['device_type']}\n")
+                f.write(f"Direction:     {packet['direction']}\n")
+                f.write(f"Size:          {packet['size']} bytes\n")
+                f.write(f"Source:        {packet['local_addr'] if packet['direction'] == 'TX' else packet['remote_addr']}\n")
+                f.write(f"Destination:   {packet['remote_addr'] if packet['direction'] == 'TX' else packet['local_addr']}\n")
+                f.write(f"Protocol Info: {packet['protocol_info']}\n")
+                f.write("\n")
+
+    def _save_as_pcap(self, file_path: str, packets: List[Dict]):
+        """Save packets in PCAP format"""
+        with open(file_path, 'wb') as f:
+            # Write PCAP global header
+            # Magic number (0xa1b2c3d4), version (2.4), timezone (0), sigfigs (0),
+            # snaplen (65535), network (1=Ethernet)
+            f.write(struct.pack('IHHiIII', 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1))
+
+            # Write packet records
+            for packet in packets:
+                # Create pseudo packet data with metadata
+                packet_info = (
+                    f"Device: {packet['device_id']} | "
+                    f"Type: {packet['device_type']} | "
+                    f"Dir: {packet['direction']} | "
+                    f"Size: {packet['size']} | "
+                    f"Proto: {packet['protocol_info']}"
+                ).encode('utf-8')
+
+                # Packet header: timestamp (sec, usec), captured length, original length
+                timestamp = packet['timestamp']
+                ts_sec = int(timestamp.timestamp())
+                ts_usec = timestamp.microsecond
+                caplen = len(packet_info)
+                origlen = packet['size']
+
+                f.write(struct.pack('IIII', ts_sec, ts_usec, caplen, origlen))
+                f.write(packet_info)
 
     def refresh_packets(self):
         """Refresh the packet table display"""
