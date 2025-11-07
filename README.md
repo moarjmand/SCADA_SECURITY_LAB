@@ -2,16 +2,19 @@
 
 # 🏭 SCADA Network Risk Assessment System
 
-### *A Comprehensive Industrial Control System Security Platform*
+### *A Comprehensive Industrial Control System Security Testing & Analysis Platform*
 
 ![Version](https://img.shields.io/badge/version-3.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 ![Security](https://img.shields.io/badge/security-testing-red.svg)
+![Devices](https://img.shields.io/badge/devices-14-brightgreen.svg)
+![Protocols](https://img.shields.io/badge/protocols-5-blue.svg)
+![Vendors](https://img.shields.io/badge/vendors-8-orange.svg)
 
-**🎯 Purpose:** Advanced Risk Assessment and Security Testing for SCADA Networks
-**✅ Version:** 3.0 - Production Ready
+**🎯 Purpose:** Comprehensive ICS Security Testing & Risk Assessment Platform
+**✅ Version:** 3.0 - All Bugs Fixed - Production Ready
 
 [Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Documentation](#-documentation)
 
@@ -36,14 +39,15 @@
 
 ## 🌟 Overview
 
-This system provides a **complete environment** for assessing security risks in **SCADA** (Supervisory Control and Data Acquisition) networks. It simulates real industrial devices, performs vulnerability scanning, and integrates with the **National Vulnerability Database (NVD)** to provide accurate security assessments.
+This system provides a **comprehensive security testing platform** for **SCADA** (Supervisory Control and Data Acquisition) and **Industrial Control Systems (ICS)**. It simulates 14 real industrial devices from 8 major vendors, performs vulnerability scanning, integrates with the **NIST National Vulnerability Database (NVD)**, and includes advanced features like **Intrusion Detection System (IDS)**, **AI-powered analysis**, and **attack simulation** capabilities.
 
 <div align="center">
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  🔧 Device Simulation  →  🔍 Vulnerability Scan  →  📊 Risk Analysis  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 🔧 Device Simulation → 📦 Packet Capture → 🔬 IDS Analysis → 🔍 Vulnerability │
+│ Scan → 🛡️ NIST Risk Assessment → 🤖 AI Analysis → 📊 Recommendations        │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 </div>
@@ -51,11 +55,14 @@ This system provides a **complete environment** for assessing security risks in 
 ### 🎯 Key Highlights
 
 > **✨ Real Network Traffic** - Authentic SCADA protocol simulation
-> **🏢 Multi-Vendor Support** - 14+ devices from 8+ major vendors
+> **🏢 Multi-Vendor Support** - 14 devices from 8 major vendors
 > **🔐 NVD Integration** - Real-time CVE data from NIST
-> **📈 Risk Assessment** - Comprehensive security analysis
+> **📈 Risk Assessment** - Comprehensive NIST-based security analysis
 > **🌐 Network Scanner** - Active vulnerability detection
-> **💻 Interactive GUI** - PyQt6-based interface
+> **💻 Interactive GUI** - PyQt6-based interface with 10 specialized tabs
+> **🔬 IDS Integration** - Built-in Intrusion Detection System
+> **🤖 AI-Powered Analysis** - Intelligent vulnerability prediction
+> **⚠️ Attack Simulation** - Security testing and penetration testing tools
 
 ---
 
@@ -71,16 +78,18 @@ This system provides a **complete environment** for assessing security risks in 
 - Real network traffic generation
 - Authentic SCADA protocol packets
 - Multi-device orchestration
-- Traffic statistics tracking
+- Real-time traffic statistics and packet capture
+- Support for Modbus TCP, DNP3, S7comm, EtherNet/IP
 
 </td>
 <td width="50%">
 
 #### 🔍 **Vulnerability Assessment**
-- NVD CVE database integration
-- CVSS score analysis
+- NVD CVE database integration (NIST API 2.0)
+- CVSS score analysis (v2, v3.0, v3.1)
 - Real-time vulnerability scanning
-- Risk scoring algorithms
+- NIST-based risk scoring framework
+- Device-specific vulnerability search
 
 </td>
 </tr>
@@ -89,18 +98,42 @@ This system provides a **complete environment** for assessing security risks in 
 
 #### 🖥️ **Interactive Interface**
 - PyQt6-based modern GUI
-- Multiple monitoring tabs
+- 10 specialized monitoring tabs
 - Real-time data visualization
-- Device management console
+- Comprehensive device management console
+- Export reports and diagnostics
 
 </td>
 <td width="50%">
 
 #### 🔧 **Device Management**
-- 14+ pre-configured devices
+- 14 pre-configured industrial devices
+- 8 major vendor support (ABB, Siemens, Rockwell, Schneider, GE, Honeywell, Mitsubishi, Omron)
 - Protocol-specific handlers
-- Port configuration
-- Enable/disable controls
+- Dynamic port configuration
+- Start/stop controls per device
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+#### 🔬 **Advanced Security Features**
+- Intrusion Detection System (IDS)
+- Packet analysis and inspection
+- Attack simulation capabilities
+- Network anomaly detection
+- Security event logging
+
+</td>
+<td width="50%">
+
+#### 🤖 **AI & Analytics**
+- AI-powered vulnerability prediction
+- Automated security recommendations
+- Risk trend analysis
+- Compliance assessment
+- Remediation guidance
 
 </td>
 </tr>
@@ -128,17 +161,24 @@ This system provides a **complete environment** for assessing security risks in 
 
 <div align="center">
 
-| Vendor | Device Model | Protocol | Default Port | Status |
-|:------:|:-------------|:--------:|:------------:|:------:|
-| **ABB** | RTU560 | Modbus TCP | 502 | ✅ |
-| **SEL** | SEL-3622 | DNP3 | 20000 | ✅ |
-| **Siemens** | S7-1200 | S7comm | 102 | ✅ |
-| **Rockwell** | CompactLogix | EtherNet/IP | 44818 | ✅ |
-| **Schneider** | Modicon M580 | Modicon | 502 | ✅ |
-| **GE** | Multilin 850 | DNP3 | 20000 | ✅ |
-| **Honeywell** | HC900 | Modbus | 502 | ✅ |
-| **Mitsubishi** | FX5U | Modbus | 502 | ✅ |
-| **Omron** | NJ-series | EtherNet/IP | 44818 | ✅ |
+| Device ID | Vendor | Device Model | Protocol | Default Port | Status |
+|:---------:|:------:|:-------------|:--------:|:------------:|:------:|
+| **RTU_001** | **ABB** | RTU560 | Modbus TCP | 502 | ✅ |
+| **RTU_002** | **Schneider Electric** | ION7650 | DNP3 | 20000 | ✅ |
+| **PLC_001** | **Siemens** | S7-1200 | S7comm | 102 | ✅ |
+| **PLC_002** | **Siemens** | S7-300 | S7comm | 1102 | ✅ |
+| **PLC_003** | **Siemens** | S7-1500 | S7comm | 2102 | ✅ |
+| **AB_001** | **Rockwell** | MicroLogix | EtherNet/IP | 44818 | ✅ |
+| **AB_002** | **Rockwell** | CompactLogix | EtherNet/IP | 44819 | ✅ |
+| **MOD_001** | **Schneider** | Modicon M340 | Modicon | 5020 | ✅ |
+| **MOD_002** | **Schneider** | Modicon M580 | Modicon | 5021 | ✅ |
+| **GE_001** | **GE** | Multilin SR489 | DNP3/Modbus | 5030 | ✅ |
+| **GE_002** | **GE** | Multilin D60 | DNP3/Modbus | 5031 | ✅ |
+| **HON_001** | **Honeywell** | HC900 | Modbus | 5040 | ✅ |
+| **MIT_001** | **Mitsubishi** | FX5U | Modbus | 5007 | ✅ |
+| **OMR_001** | **Omron** | NJ-series | EtherNet/IP | 9600 | ✅ |
+
+**Total: 14 Devices | 8 Vendors | 5 Protocols**
 
 </div>
 
@@ -149,25 +189,27 @@ This system provides a **complete environment** for assessing security risks in 
 <div align="center">
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     🖥️  GUI Interface (PyQt6)                    │
-├─────────────────────────────────────────────────────────────────┤
-│  📊 Monitor  │  🔧 Devices  │  🔍 Scanner  │  🛡️  Vulnerabilities │
-└────────┬────────────────────────────────────────────────┬────────┘
-         │                                                │
-    ┌────▼────────────────────────────────────────────────▼─────┐
-    │              🎮 SCADA Server Core                         │
-    │  • Device Management    • Traffic Monitoring              │
-    │  • Protocol Handlers    • Risk Calculation                │
-    └────┬──────────────────────────────────────────────────┬───┘
-         │                                                  │
-    ┌────▼────────────────────┐              ┌─────────────▼──────┐
-    │  🔌 Device Simulators    │              │  🌐 NVD API Client │
-    │  • Modbus               │              │  • CVE Database    │
-    │  • DNP3                 │              │  • CVSS Scores     │
-    │  • S7comm               │              │  • Vulnerability   │
-    │  • EtherNet/IP          │              │    Search          │
-    └─────────────────────────┘              └────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                       🖥️  GUI Interface (PyQt6)                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ 📊 Monitor │ ⚙️ Devices │ 📦 Packets │ 🔬 IDS │ 🔍 Scanner │ 🛡️ Vuln Assessment │
+│ 🛡️ NIST Risk │ 📋 Recommendations │ 🤖 AI Analysis │ ⚠️ Attack Simulator      │
+└────────┬─────────────────────────────────────────────────────────┬───────────┘
+         │                                                          │
+    ┌────▼──────────────────────────────────────────────────────────▼─────┐
+    │                    🎮 SCADA Server Core                              │
+    │  • Device Management       • Traffic Monitoring & Packet Capture     │
+    │  • Protocol Handlers       • Risk Calculation Engine                 │
+    │  • IDS Engine             • Attack Simulation Framework              │
+    └────┬────────────────────────────────────────────────────┬────────────┘
+         │                                                    │
+    ┌────▼────────────────────────┐            ┌─────────────▼──────────────┐
+    │  🔌 Device Simulators (14)   │            │  🌐 NVD API Client         │
+    │  • Modbus TCP (5 devices)   │            │  • CVE Database (NIST 2.0) │
+    │  • DNP3 (3 devices)         │            │  • CVSS v2/v3.0/v3.1       │
+    │  • S7comm (3 devices)       │            │  • Vulnerability Search    │
+    │  • EtherNet/IP (3 devices)  │            │  • Device-specific CVEs    │
+    └─────────────────────────────┘            └────────────────────────────┘
 ```
 
 </div>
@@ -176,12 +218,15 @@ This system provides a **complete environment** for assessing security risks in 
 
 | Component | Description | Technology |
 |-----------|-------------|------------|
-| 🔌 **NVD API Client** | Fetches real CVE vulnerability data from NIST | REST API |
-| 🏭 **Device Simulators** | Implements protocol-specific device behavior | Python Sockets |
-| 🖧 **SCADA Server** | Manages multiple device instances | Threading |
-| 🔍 **Network Scanner** | Performs active vulnerability scanning | Port Scanning |
-| 📊 **Risk Assessment Engine** | Calculates security risk scores | CVSS Analysis |
-| 💻 **GUI Interface** | Multi-tab monitoring and control | PyQt6 |
+| 🔌 **NVD API Client** | Fetches real CVE vulnerability data from NIST API v2.0 | REST API, Requests |
+| 🏭 **Device Simulators** | Implements protocol-specific device behavior for 14 devices | Python Sockets, Threading |
+| 🖧 **SCADA Server** | Manages multiple device instances with traffic monitoring | Threading, QObject Signals |
+| 🔍 **Network Scanner** | Performs active vulnerability and port scanning | Socket Programming |
+| 📊 **Risk Assessment Engine** | NIST-based risk framework with CVSS analysis | CVSS v2/v3.0/v3.1 |
+| 🔬 **IDS Engine** | Intrusion Detection System with packet analysis | Pattern Matching |
+| 🤖 **AI Assessment** | Intelligent vulnerability prediction and analysis | AI Algorithms |
+| ⚠️ **Attack Simulator** | Security testing with multiple attack vectors | Protocol Simulation |
+| 💻 **GUI Interface** | Multi-tab monitoring and control (10 tabs) | PyQt6 |
 
 ---
 
@@ -213,7 +258,7 @@ datetime, collections, typing, logging
 
 ```bash
 git clone <repository-url>
-cd Scada
+cd SCADA_SECURITY_LAB
 ```
 
 #### **Step 2: Install Dependencies**
@@ -225,7 +270,7 @@ pip install PyQt6 requests
 #### **Step 3: Run the Application**
 
 ```bash
-python "scada_risk_system (1).py"
+python scada_risk_system.py
 ```
 
 > 💡 **Tip:** Use a virtual environment for cleaner dependency management!
@@ -247,7 +292,7 @@ python "scada_risk_system (1).py"
 #### **1️⃣ Launch the Application**
 
 ```bash
-python "scada_risk_system (1).py"
+python scada_risk_system.py
 ```
 
 > ✅ The system automatically configures **14 default devices** on startup
@@ -256,10 +301,16 @@ python "scada_risk_system (1).py"
 
 | Tab | Icon | Purpose |
 |-----|:----:|---------|
-| **SCADA Monitor** | 📊 | View real-time device status and traffic |
-| **Device Manager** | 🔧 | Enable/disable devices, configure ports |
-| **Network Scanner** | 🔍 | Scan for vulnerabilities and open ports |
-| **Vulnerability Analysis** | 🛡️ | Search CVEs and view risk assessments |
+| **SCADA Monitor** | 📊 | View real-time device status, measurements, and traffic statistics |
+| **Device Manager** | ⚙️ | Enable/disable devices, configure ports, start/stop services |
+| **Packets** | 📦 | Monitor network packet traffic in real-time |
+| **Packet Analysis (IDS)** | 🔬 | Intrusion Detection System with packet analysis and threat detection |
+| **Network Scanner** | 🔍 | Scan for vulnerabilities, open ports, and network devices |
+| **Vulnerability Assessment** | 🛡️ | Search CVEs, view risk assessments, and analyze security issues |
+| **NIST Risk Assessment** | 🛡️ | Comprehensive NIST-based risk analysis framework |
+| **Analysis Recommendations** | 📋 | Automated security recommendations and remediation guidance |
+| **AI Assessment** | 🤖 | AI-powered security analysis and vulnerability prediction |
+| **Attack Simulator** | ⚠️ | Simulate various attack scenarios for security testing |
 
 ---
 
@@ -492,16 +543,26 @@ Output: Console + Application logs
 
 ## 📖 About This Project
 
-The SCADA Network Risk Assessment System is a comprehensive security testing platform designed to help security professionals identify and assess vulnerabilities in industrial control systems.
+The SCADA Network Risk Assessment System is a comprehensive security testing and analysis platform designed to help security professionals, researchers, and industrial control system engineers identify and assess vulnerabilities in critical infrastructure.
 
 **Key Capabilities:**
-- ✅ Multi-vendor SCADA device simulation
-- ✅ Real-time vulnerability assessment
-- ✅ NIST NVD integration for CVE tracking
-- ✅ Comprehensive risk scoring algorithms
-- ✅ Professional-grade security analysis tools
+- ✅ **14 Industrial Device Simulators** - Authentic protocol implementations from 8 major vendors
+- ✅ **Real-time Vulnerability Assessment** - NIST NVD integration with CVE tracking
+- ✅ **Intrusion Detection System** - Built-in IDS with packet analysis and threat detection
+- ✅ **NIST Risk Framework** - Comprehensive risk scoring based on NIST guidelines
+- ✅ **AI-Powered Analysis** - Intelligent vulnerability prediction and security insights
+- ✅ **Attack Simulation** - Security testing with multiple attack vectors
+- ✅ **Network Traffic Analysis** - Real-time packet capture and protocol inspection
+- ✅ **Automated Recommendations** - Actionable security guidance and remediation steps
 
-This platform provides security teams with the tools needed to proactively identify and mitigate risks in critical infrastructure environments.
+**Platform Features:**
+- 🔧 **10 Specialized Tabs** - Comprehensive monitoring and analysis interfaces
+- 🌐 **5 Protocol Support** - Modbus TCP, DNP3, S7comm, EtherNet/IP, Modicon
+- 📊 **Real-time Monitoring** - Live device status, measurements, and traffic statistics
+- 🛡️ **CVSS v2/v3.0/v3.1** - Multi-version vulnerability scoring support
+- 📈 **Export Capabilities** - Generate comprehensive security reports
+
+This platform provides security teams with professional-grade tools needed to proactively identify, analyze, and mitigate risks in critical infrastructure and industrial control system environments.
 
 ---
 
@@ -528,17 +589,15 @@ On startup, the system auto-configures:
 
 <div align="center">
 
-| Device Type | Count | Vendors |
-|:-----------:|:-----:|:--------|
-| 🔧 **Modbus RTU** | 2 | ABB, Honeywell |
-| ⚡ **DNP3 RTU** | 2 | SEL, GE |
-| 🏭 **S7 PLC** | 3 | Siemens (multiple ports) |
-| 🔌 **Rockwell PLC** | 2 | Different ports |
-| 🔩 **Schneider Modicon** | 2 | Primary/Secondary |
-| 🏢 **Mitsubishi PLC** | 1 | Standard config |
-| 🔧 **Omron PLC** | 1 | Standard config |
+| Device Type | Count | Vendors | Models |
+|:-----------:|:-----:|:--------|:-------|
+| 🔧 **Modbus TCP** | 5 | ABB, Honeywell, Mitsubishi, GE | RTU560, HC900, FX5U, Multilin |
+| ⚡ **DNP3** | 3 | Schneider, GE | ION7650, SR489, D60 |
+| 🏭 **Siemens S7** | 3 | Siemens | S7-1200, S7-300, S7-1500 |
+| 🔌 **EtherNet/IP** | 3 | Rockwell, Omron | MicroLogix, CompactLogix, NJ-series |
+| 🔩 **Modicon** | 2 | Schneider | M340, M580 |
 
-**Total: 14 Devices**
+**Total: 14 Devices across 8 Vendors**
 
 </div>
 
