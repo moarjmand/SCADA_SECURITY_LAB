@@ -2596,6 +2596,19 @@ class PacketsTab(QWidget):
         self.current_page = 0
         self.packets_per_page = 100
         self.all_packets = []
+
+        # Column visibility settings - all visible by default
+        self.column_visibility = {
+            'timestamp': True,
+            'device_id': True,
+            'type': True,
+            'direction': True,
+            'size': True,
+            'source': True,
+            'destination': True,
+            'protocol_info': True
+        }
+
         self.init_ui()
 
     def init_ui(self):
@@ -2649,6 +2662,56 @@ class PacketsTab(QWidget):
 
         control_group.setLayout(control_layout)
         layout.addWidget(control_group)
+
+        # Column visibility controls
+        columns_group = QGroupBox("Packet Attributes (Select columns to display)")
+        columns_layout = QHBoxLayout()
+
+        # Create checkboxes for each column
+        self.col_timestamp_check = QCheckBox("Timestamp")
+        self.col_timestamp_check.setChecked(True)
+        self.col_timestamp_check.toggled.connect(lambda checked: self.toggle_column('timestamp', checked))
+
+        self.col_device_id_check = QCheckBox("Device ID")
+        self.col_device_id_check.setChecked(True)
+        self.col_device_id_check.toggled.connect(lambda checked: self.toggle_column('device_id', checked))
+
+        self.col_type_check = QCheckBox("Type")
+        self.col_type_check.setChecked(True)
+        self.col_type_check.toggled.connect(lambda checked: self.toggle_column('type', checked))
+
+        self.col_direction_check = QCheckBox("Direction")
+        self.col_direction_check.setChecked(True)
+        self.col_direction_check.toggled.connect(lambda checked: self.toggle_column('direction', checked))
+
+        self.col_size_check = QCheckBox("Size")
+        self.col_size_check.setChecked(True)
+        self.col_size_check.toggled.connect(lambda checked: self.toggle_column('size', checked))
+
+        self.col_source_check = QCheckBox("Source")
+        self.col_source_check.setChecked(True)
+        self.col_source_check.toggled.connect(lambda checked: self.toggle_column('source', checked))
+
+        self.col_destination_check = QCheckBox("Destination")
+        self.col_destination_check.setChecked(True)
+        self.col_destination_check.toggled.connect(lambda checked: self.toggle_column('destination', checked))
+
+        self.col_protocol_check = QCheckBox("Protocol Info")
+        self.col_protocol_check.setChecked(True)
+        self.col_protocol_check.toggled.connect(lambda checked: self.toggle_column('protocol_info', checked))
+
+        columns_layout.addWidget(self.col_timestamp_check)
+        columns_layout.addWidget(self.col_device_id_check)
+        columns_layout.addWidget(self.col_type_check)
+        columns_layout.addWidget(self.col_direction_check)
+        columns_layout.addWidget(self.col_size_check)
+        columns_layout.addWidget(self.col_source_check)
+        columns_layout.addWidget(self.col_destination_check)
+        columns_layout.addWidget(self.col_protocol_check)
+        columns_layout.addStretch()
+
+        columns_group.setLayout(columns_layout)
+        layout.addWidget(columns_group)
 
         # Packet table
         layout.addWidget(QLabel("<b>Captured Packets</b>"))
@@ -2716,6 +2779,41 @@ class PacketsTab(QWidget):
 
     def toggle_auto_scroll(self, checked: bool):
         self.auto_scroll = checked
+
+    def toggle_column(self, column_name: str, checked: bool):
+        """Toggle visibility of a column and refresh the display"""
+        self.column_visibility[column_name] = checked
+        self.update_table_columns()
+        self.refresh_packets()
+
+    def update_table_columns(self):
+        """Update table column headers based on visibility settings"""
+        # Get visible columns in order
+        all_columns = [
+            ('timestamp', 'Timestamp'),
+            ('device_id', 'Device ID'),
+            ('type', 'Type'),
+            ('direction', 'Direction'),
+            ('size', 'Size (bytes)'),
+            ('source', 'Source'),
+            ('destination', 'Destination'),
+            ('protocol_info', 'Protocol Info')
+        ]
+
+        visible_columns = [(name, label) for name, label in all_columns if self.column_visibility[name]]
+
+        # Update table column count and headers
+        self.packet_table.setColumnCount(len(visible_columns))
+        self.packet_table.setHorizontalHeaderLabels([label for _, label in visible_columns])
+
+        # Reconfigure header sizing
+        header = self.packet_table.horizontalHeader()
+        header.setStretchLastSection(True)
+
+        # Apply resize modes for specific visible columns
+        for idx, (name, _) in enumerate(visible_columns):
+            if name in ['timestamp', 'device_id', 'direction', 'size']:
+                header.setSectionResizeMode(idx, QHeaderView.ResizeMode.ResizeToContents)
 
     def start_capture(self):
         """Start packet capture"""
@@ -2845,8 +2943,8 @@ class PacketsTab(QWidget):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             'Save Packet Capture',
-            f'packet_capture_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt',
-            'Text Files (*.txt);;PCAP Files (*.pcap);;All Files (*.*)'
+            f'packet_capture_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pcap',
+            'PCAP Files (*.pcap);;JSON Files (*.json);;Text Files (*.txt);;All Files (*.*)'
         )
 
         if not file_path:
@@ -2856,6 +2954,8 @@ class PacketsTab(QWidget):
             # Determine file format based on extension
             if file_path.endswith('.pcap'):
                 self._save_as_pcap(file_path, packets)
+            elif file_path.endswith('.json'):
+                self._save_as_json(file_path, packets)
             else:
                 self._save_as_text(file_path, packets)
 
@@ -2926,6 +3026,39 @@ class PacketsTab(QWidget):
                 f.write(struct.pack('IIII', ts_sec, ts_usec, caplen, origlen))
                 f.write(packet_data)
 
+    def _save_as_json(self, file_path: str, packets: List[Dict]):
+        """Save packets as JSON file"""
+        json_packets = []
+        for packet in packets:
+            json_packet = {
+                'timestamp': packet['timestamp'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                'device_id': packet['device_id'],
+                'device_type': packet['device_type'],
+                'direction': packet['direction'],
+                'size': packet['size'],
+                'local_address': packet['local_addr'],
+                'remote_address': packet['remote_addr'],
+                'source': packet['local_addr'] if packet['direction'] == 'TX' else packet['remote_addr'],
+                'destination': packet['remote_addr'] if packet['direction'] == 'TX' else packet['local_addr'],
+                'protocol_info': packet['protocol_info']
+            }
+            # Optionally include raw data as hex if available
+            if 'raw_data' in packet and packet['raw_data']:
+                json_packet['raw_data_hex'] = packet['raw_data'].hex()
+            json_packets.append(json_packet)
+
+        capture_data = {
+            'capture_info': {
+                'generated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'total_packets': len(packets),
+                'format': 'SCADA Network Packet Capture JSON'
+            },
+            'packets': json_packets
+        }
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(capture_data, f, indent=2, ensure_ascii=False)
+
     def refresh_packets(self):
         """Refresh the packet table display"""
         self.all_packets = self.scada_server.get_all_packets()
@@ -2947,41 +3080,52 @@ class PacketsTab(QWidget):
 
         self.packet_table.setRowCount(len(display_packets))
 
+        # Define all column data generators
+        all_columns = [
+            'timestamp', 'device_id', 'type', 'direction',
+            'size', 'source', 'destination', 'protocol_info'
+        ]
+
+        # Get list of visible columns
+        visible_columns = [col for col in all_columns if self.column_visibility[col]]
+
         for idx, packet in enumerate(display_packets):
-            # Timestamp
-            timestamp_str = packet['timestamp'].strftime('%H:%M:%S.%f')[:-3]
-            self.packet_table.setItem(idx, 0, QTableWidgetItem(timestamp_str))
+            col_idx = 0  # Track the actual column index in the table
 
-            # Device ID
-            self.packet_table.setItem(idx, 1, QTableWidgetItem(packet['device_id']))
+            for col_name in visible_columns:
+                if col_name == 'timestamp':
+                    timestamp_str = packet['timestamp'].strftime('%H:%M:%S.%f')[:-3]
+                    self.packet_table.setItem(idx, col_idx, QTableWidgetItem(timestamp_str))
 
-            # Device Type
-            self.packet_table.setItem(idx, 2, QTableWidgetItem(packet['device_type']))
+                elif col_name == 'device_id':
+                    self.packet_table.setItem(idx, col_idx, QTableWidgetItem(packet['device_id']))
 
-            # Direction with color coding
-            direction_item = QTableWidgetItem(packet['direction'])
-            if packet['direction'] == 'RX':
-                direction_item.setForeground(QColor(0, 128, 0))  # Green
-            else:
-                direction_item.setForeground(QColor(0, 0, 255))  # Blue
-            self.packet_table.setItem(idx, 3, direction_item)
+                elif col_name == 'type':
+                    self.packet_table.setItem(idx, col_idx, QTableWidgetItem(packet['device_type']))
 
-            # Size
-            self.packet_table.setItem(idx, 4, QTableWidgetItem(str(packet['size'])))
+                elif col_name == 'direction':
+                    direction_item = QTableWidgetItem(packet['direction'])
+                    if packet['direction'] == 'RX':
+                        direction_item.setForeground(QColor(0, 128, 0))  # Green
+                    else:
+                        direction_item.setForeground(QColor(0, 0, 255))  # Blue
+                    self.packet_table.setItem(idx, col_idx, direction_item)
 
-            # Source and Destination based on direction
-            if packet['direction'] == 'RX':
-                source = packet['remote_addr']
-                dest = packet['local_addr']
-            else:
-                source = packet['local_addr']
-                dest = packet['remote_addr']
+                elif col_name == 'size':
+                    self.packet_table.setItem(idx, col_idx, QTableWidgetItem(str(packet['size'])))
 
-            self.packet_table.setItem(idx, 5, QTableWidgetItem(source))
-            self.packet_table.setItem(idx, 6, QTableWidgetItem(dest))
+                elif col_name == 'source':
+                    source = packet['remote_addr'] if packet['direction'] == 'RX' else packet['local_addr']
+                    self.packet_table.setItem(idx, col_idx, QTableWidgetItem(source))
 
-            # Protocol Info
-            self.packet_table.setItem(idx, 7, QTableWidgetItem(packet['protocol_info']))
+                elif col_name == 'destination':
+                    dest = packet['local_addr'] if packet['direction'] == 'RX' else packet['remote_addr']
+                    self.packet_table.setItem(idx, col_idx, QTableWidgetItem(dest))
+
+                elif col_name == 'protocol_info':
+                    self.packet_table.setItem(idx, col_idx, QTableWidgetItem(packet['protocol_info']))
+
+                col_idx += 1
 
         # Update pagination controls
         if total_packets > 0:
