@@ -2609,6 +2609,15 @@ class PacketsTab(QWidget):
             'protocol_info': True
         }
 
+        # Filter settings
+        self.filters = {
+            'source_ip': '',
+            'source_port': '',
+            'dest_ip': '',
+            'dest_port': '',
+            'protocol': ''
+        }
+
         self.init_ui()
 
     def init_ui(self):
@@ -2713,6 +2722,66 @@ class PacketsTab(QWidget):
         columns_group.setLayout(columns_layout)
         layout.addWidget(columns_group)
 
+        # Filter controls
+        filter_group = QGroupBox("Packet Filters")
+        filter_layout = QGridLayout()
+
+        # Source IP filter
+        filter_layout.addWidget(QLabel("Source IP:"), 0, 0)
+        self.filter_source_ip = QLineEdit()
+        self.filter_source_ip.setPlaceholderText("e.g., 192.168.1.1")
+        self.filter_source_ip.textChanged.connect(self.update_filters)
+        filter_layout.addWidget(self.filter_source_ip, 0, 1)
+
+        # Source Port filter
+        filter_layout.addWidget(QLabel("Source Port:"), 0, 2)
+        self.filter_source_port = QLineEdit()
+        self.filter_source_port.setPlaceholderText("e.g., 502")
+        self.filter_source_port.textChanged.connect(self.update_filters)
+        filter_layout.addWidget(self.filter_source_port, 0, 3)
+
+        # Destination IP filter
+        filter_layout.addWidget(QLabel("Dest IP:"), 1, 0)
+        self.filter_dest_ip = QLineEdit()
+        self.filter_dest_ip.setPlaceholderText("e.g., 192.168.1.2")
+        self.filter_dest_ip.textChanged.connect(self.update_filters)
+        filter_layout.addWidget(self.filter_dest_ip, 1, 1)
+
+        # Destination Port filter
+        filter_layout.addWidget(QLabel("Dest Port:"), 1, 2)
+        self.filter_dest_port = QLineEdit()
+        self.filter_dest_port.setPlaceholderText("e.g., 502")
+        self.filter_dest_port.textChanged.connect(self.update_filters)
+        filter_layout.addWidget(self.filter_dest_port, 1, 3)
+
+        # Protocol filter
+        filter_layout.addWidget(QLabel("Protocol:"), 0, 4)
+        self.filter_protocol = QLineEdit()
+        self.filter_protocol.setPlaceholderText("e.g., Modbus")
+        self.filter_protocol.textChanged.connect(self.update_filters)
+        filter_layout.addWidget(self.filter_protocol, 0, 5)
+
+        # Populate filters button
+        self.populate_filters_btn = QPushButton("📋 Set from Current Packet")
+        self.populate_filters_btn.clicked.connect(self.populate_default_filters)
+        self.populate_filters_btn.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold;")
+        filter_layout.addWidget(self.populate_filters_btn, 1, 4, 1, 2)
+
+        # Reset filters button
+        self.reset_filters_btn = QPushButton("🔄 Reset Filters")
+        self.reset_filters_btn.clicked.connect(self.reset_filters)
+        self.reset_filters_btn.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold;")
+        filter_layout.addWidget(self.reset_filters_btn, 1, 6)
+
+        # Apply filters button
+        self.apply_filters_btn = QPushButton("✓ Apply Filters")
+        self.apply_filters_btn.clicked.connect(self.apply_filters)
+        self.apply_filters_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        filter_layout.addWidget(self.apply_filters_btn, 0, 6)
+
+        filter_group.setLayout(filter_layout)
+        layout.addWidget(filter_group)
+
         # Packet table
         layout.addWidget(QLabel("<b>Captured Packets</b>"))
         self.packet_table = QTableWidget()
@@ -2814,6 +2883,115 @@ class PacketsTab(QWidget):
         for idx, (name, _) in enumerate(visible_columns):
             if name in ['timestamp', 'device_id', 'direction', 'size']:
                 header.setSectionResizeMode(idx, QHeaderView.ResizeMode.ResizeToContents)
+
+    def update_filters(self):
+        """Update filter state from input fields"""
+        self.filters['source_ip'] = self.filter_source_ip.text().strip()
+        self.filters['source_port'] = self.filter_source_port.text().strip()
+        self.filters['dest_ip'] = self.filter_dest_ip.text().strip()
+        self.filters['dest_port'] = self.filter_dest_port.text().strip()
+        self.filters['protocol'] = self.filter_protocol.text().strip()
+
+    def apply_filters(self):
+        """Apply filters and refresh the display"""
+        self.update_filters()
+        self.current_page = 0  # Reset to first page when filters change
+        self.refresh_packets()
+
+    def reset_filters(self):
+        """Clear all filters and refresh the display"""
+        self.filter_source_ip.clear()
+        self.filter_source_port.clear()
+        self.filter_dest_ip.clear()
+        self.filter_dest_port.clear()
+        self.filter_protocol.clear()
+        self.filters = {
+            'source_ip': '',
+            'source_port': '',
+            'dest_ip': '',
+            'dest_port': '',
+            'protocol': ''
+        }
+        self.current_page = 0
+        self.refresh_packets()
+
+    def populate_default_filters(self):
+        """Populate filter fields with values from the first packet (if available)"""
+        all_packets = self.scada_server.get_all_packets()
+        if all_packets:
+            # Get the most recent packet
+            first_packet = all_packets[0]
+
+            # Extract source and destination from the packet
+            if first_packet['direction'] == 'RX':
+                source = first_packet['remote_addr']
+                dest = first_packet['local_addr']
+            else:
+                source = first_packet['local_addr']
+                dest = first_packet['remote_addr']
+
+            # Parse IP and port from source
+            if ':' in source:
+                source_ip, source_port = source.rsplit(':', 1)
+                self.filter_source_ip.setText(source_ip)
+                self.filter_source_port.setText(source_port)
+
+            # Parse IP and port from destination
+            if ':' in dest:
+                dest_ip, dest_port = dest.rsplit(':', 1)
+                self.filter_dest_ip.setText(dest_ip)
+                self.filter_dest_port.setText(dest_port)
+
+            # Set protocol info
+            protocol_info = first_packet.get('protocol_info', '')
+            self.filter_protocol.setText(protocol_info)
+
+            # Update filter state
+            self.update_filters()
+
+    def filter_packets(self, packets):
+        """Filter packets based on current filter settings"""
+        if not any(self.filters.values()):
+            # No filters applied
+            return packets
+
+        filtered_packets = []
+        for packet in packets:
+            # Determine source and destination based on direction
+            if packet['direction'] == 'RX':
+                source = packet['remote_addr']
+                dest = packet['local_addr']
+            else:
+                source = packet['local_addr']
+                dest = packet['remote_addr']
+
+            # Parse source IP and port
+            source_ip = ''
+            source_port = ''
+            if ':' in source:
+                source_ip, source_port = source.rsplit(':', 1)
+
+            # Parse destination IP and port
+            dest_ip = ''
+            dest_port = ''
+            if ':' in dest:
+                dest_ip, dest_port = dest.rsplit(':', 1)
+
+            # Apply filters
+            if self.filters['source_ip'] and self.filters['source_ip'] not in source_ip:
+                continue
+            if self.filters['source_port'] and self.filters['source_port'] != source_port:
+                continue
+            if self.filters['dest_ip'] and self.filters['dest_ip'] not in dest_ip:
+                continue
+            if self.filters['dest_port'] and self.filters['dest_port'] != dest_port:
+                continue
+            if self.filters['protocol'] and self.filters['protocol'].lower() not in packet.get('protocol_info', '').lower():
+                continue
+
+            filtered_packets.append(packet)
+
+        return filtered_packets
 
     def start_capture(self):
         """Start packet capture"""
@@ -3063,10 +3241,13 @@ class PacketsTab(QWidget):
         """Refresh the packet table display"""
         self.all_packets = self.scada_server.get_all_packets()
 
-        self.packet_count_label.setText(f"Packets: {len(self.all_packets)}")
+        # Apply filters
+        filtered_packets = self.filter_packets(self.all_packets)
 
-        # Calculate pagination
-        total_packets = len(self.all_packets)
+        self.packet_count_label.setText(f"Packets: {len(filtered_packets)} (Total: {len(self.all_packets)})")
+
+        # Calculate pagination based on filtered packets
+        total_packets = len(filtered_packets)
         total_pages = max(1, (total_packets + self.packets_per_page - 1) // self.packets_per_page)
 
         # Ensure current page is valid
@@ -3076,7 +3257,7 @@ class PacketsTab(QWidget):
         # Get packets for current page
         start_idx = self.current_page * self.packets_per_page
         end_idx = min(start_idx + self.packets_per_page, total_packets)
-        display_packets = self.all_packets[start_idx:end_idx]
+        display_packets = filtered_packets[start_idx:end_idx]
 
         self.packet_table.setRowCount(len(display_packets))
 
