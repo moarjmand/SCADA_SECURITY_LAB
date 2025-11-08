@@ -32,6 +32,14 @@ except ImportError:
     PSUTIL_AVAILABLE = False
     logging.warning("psutil not available - network interface selection will use basic mode")
 
+# Try to import scapy for real network packet capture
+try:
+    from scapy.all import sniff, conf, get_if_list
+    SCAPY_AVAILABLE = True
+except ImportError:
+    SCAPY_AVAILABLE = False
+    logging.warning("scapy not available - real network packet capture will be disabled")
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QPushButton, QTextEdit, QTableWidget,
@@ -230,6 +238,215 @@ def get_network_interfaces() -> List[Dict[str, str]]:
             interfaces = [{'name': 'all (0.0.0.0)', 'ip': '0.0.0.0', 'status': 'UP'}]
 
     return interfaces
+
+
+# ============================================================================
+# NETWORK PACKET SNIFFER (REAL NETWORK TRAFFIC CAPTURE)
+# ============================================================================
+
+class NetworkPacketSniffer(QObject):
+    """Real network packet sniffer with promiscuous mode support"""
+
+    packet_captured = pyqtSignal(dict)  # Signal to emit captured packets
+    log_message = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.running = False
+        self.sniffer_thread = None
+        self.interface = None
+        self.packet_count = 0
+
+    def start_sniffing(self, interface: str):
+        """Start packet capture on specified interface with promiscuous mode"""
+        if not SCAPY_AVAILABLE:
+            self.log_message.emit("❌ Scapy not available - install with: pip install scapy")
+            return False
+
+        if self.running:
+            self.log_message.emit("⚠️ Packet sniffer already running")
+            return False
+
+        # Map IP address to interface name
+        interface_name = self._get_interface_name(interface)
+        if not interface_name:
+            self.log_message.emit(f"❌ Could not find interface for IP: {interface}")
+            return False
+
+        self.interface = interface_name
+        self.running = True
+        self.packet_count = 0
+
+        # Start sniffer in separate thread
+        self.sniffer_thread = threading.Thread(target=self._sniff_packets, daemon=True)
+        self.sniffer_thread.start()
+
+        self.log_message.emit(f"✅ Started capturing ALL network traffic on {interface_name} in PROMISCUOUS mode")
+        return True
+
+    def stop_sniffing(self):
+        """Stop packet capture"""
+        if self.running:
+            self.running = False
+            self.log_message.emit(f"🛑 Stopped network capture. Total packets captured: {self.packet_count}")
+
+    def _get_interface_name(self, ip_or_name: str) -> Optional[str]:
+        """Map IP address or interface name to actual interface name"""
+
+        # If it's "all" or "0.0.0.0", use None (capture on all interfaces)
+        if ip_or_name in ["0.0.0.0", "all"]:
+            return None
+
+        # If it's already an interface name, return it
+        if SCAPY_AVAILABLE:
+            available_ifaces = get_if_list()
+            if ip_or_name in available_ifaces:
+                return ip_or_name
+
+        # Try to find interface by IP address
+        if PSUTIL_AVAILABLE:
+            try:
+                net_if_addrs = psutil.net_if_addrs()
+                for iface_name, addrs in net_if_addrs.items():
+                    for addr in addrs:
+                        if addr.family == socket.AF_INET and addr.address == ip_or_name:
+                            return iface_name
+            except Exception as e:
+                logger.error(f"Error mapping IP to interface: {e}")
+
+        # Try localhost special case
+        if ip_or_name == "127.0.0.1":
+            # Look for loopback interface
+            for iface in ["lo", "lo0", "Loopback"]:
+                if SCAPY_AVAILABLE and iface in get_if_list():
+                    return iface
+
+        return None
+
+    def _sniff_packets(self):
+        """Packet sniffing thread - captures with promiscuous mode enabled"""
+        try:
+            # Configure scapy for promiscuous mode
+            if self.interface:
+                self.log_message.emit(f"📡 Capturing on interface: {self.interface}")
+            else:
+                self.log_message.emit(f"📡 Capturing on ALL interfaces")
+
+            # Start sniffing with promiscuous mode
+            # prn = callback function for each packet
+            # store = 0 to not store packets in memory (we process them immediately)
+            # promisc = 1 to enable promiscuous mode (capture ALL traffic)
+            sniff(
+                iface=self.interface,
+                prn=self._process_packet,
+                store=False,
+                promisc=True,  # PROMISCUOUS MODE - captures all network traffic
+                stop_filter=lambda x: not self.running
+            )
+        except PermissionError:
+            self.log_message.emit("❌ Permission denied - run as root/administrator for promiscuous mode")
+        except Exception as e:
+            self.log_message.emit(f"❌ Sniffer error: {e}")
+            logger.error(f"Packet sniffer error: {e}")
+        finally:
+            self.running = False
+
+    def _process_packet(self, packet):
+        """Process captured packet and emit signal"""
+        try:
+            self.packet_count += 1
+
+            # Extract packet information
+            packet_info = {
+                'timestamp': datetime.now(),
+                'device_id': 'NETWORK',
+                'device_type': 'Real Network Traffic',
+                'direction': 'RX',  # All captured from network
+                'size': len(packet),
+                'local_addr': 'N/A',
+                'remote_addr': 'N/A',
+                'protocol_info': self._get_protocol_info(packet),
+                'raw_data': bytes(packet),
+                'pcap_packet': bytes(packet)  # Store full packet for PCAP export
+            }
+
+            # Extract IP addresses if available
+            if packet.haslayer('IP'):
+                src_ip = packet['IP'].src
+                dst_ip = packet['IP'].dst
+
+                # Extract ports if TCP/UDP
+                if packet.haslayer('TCP'):
+                    src_port = packet['TCP'].sport
+                    dst_port = packet['TCP'].dport
+                    packet_info['local_addr'] = f"{dst_ip}:{dst_port}"
+                    packet_info['remote_addr'] = f"{src_ip}:{src_port}"
+                elif packet.haslayer('UDP'):
+                    src_port = packet['UDP'].sport
+                    dst_port = packet['UDP'].dport
+                    packet_info['local_addr'] = f"{dst_ip}:{dst_port}"
+                    packet_info['remote_addr'] = f"{src_ip}:{src_port}"
+                else:
+                    packet_info['local_addr'] = dst_ip
+                    packet_info['remote_addr'] = src_ip
+
+            # Emit signal with packet data
+            self.packet_captured.emit(packet_info)
+
+        except Exception as e:
+            logger.error(f"Error processing packet: {e}")
+
+    def _get_protocol_info(self, packet) -> str:
+        """Extract protocol information from packet"""
+        try:
+            protocols = []
+
+            # Layer 2
+            if packet.haslayer('Ether'):
+                protocols.append('Ethernet')
+
+            # Layer 3
+            if packet.haslayer('IP'):
+                protocols.append(f"IPv4")
+            elif packet.haslayer('IPv6'):
+                protocols.append('IPv6')
+            elif packet.haslayer('ARP'):
+                protocols.append('ARP')
+
+            # Layer 4
+            if packet.haslayer('TCP'):
+                protocols.append(f"TCP")
+            elif packet.haslayer('UDP'):
+                protocols.append('UDP')
+            elif packet.haslayer('ICMP'):
+                protocols.append('ICMP')
+
+            # Application layer protocols
+            if packet.haslayer('DNS'):
+                protocols.append('DNS')
+            elif packet.haslayer('HTTP'):
+                protocols.append('HTTP')
+            elif packet.haslayer('TLS'):
+                protocols.append('TLS')
+
+            # Check for common SCADA ports
+            if packet.haslayer('TCP') or packet.haslayer('UDP'):
+                sport = packet['TCP'].sport if packet.haslayer('TCP') else packet['UDP'].sport
+                dport = packet['TCP'].dport if packet.haslayer('TCP') else packet['UDP'].dport
+
+                if dport == 502 or sport == 502:
+                    protocols.append('Modbus')
+                elif dport == 102 or sport == 102:
+                    protocols.append('S7')
+                elif dport == 20000 or sport == 20000:
+                    protocols.append('DNP3')
+                elif dport == 44818 or sport == 44818:
+                    protocols.append('EtherNet/IP')
+
+            return ' / '.join(protocols) if protocols else 'Unknown'
+
+        except Exception as e:
+            return 'Unknown'
 
 
 # ============================================================================
@@ -1265,6 +1482,11 @@ class SCADAServer(QObject):
         # Load NVD API key from environment
         nvd_api_key = os.getenv('NVD_API_KEY')
         self.nvd_client = NVDAPIClient(api_key=nvd_api_key)
+
+        # Initialize network packet sniffer for real network traffic capture
+        self.network_sniffer = NetworkPacketSniffer()
+        self.network_sniffer.packet_captured.connect(self._on_network_packet_captured)
+        self.network_sniffer.log_message.connect(self.log_message.emit)
         
     def add_rtu(self, rtu: BaseDevice):
         rtu.scada_server = self  # Set reference to parent server
@@ -1399,14 +1621,31 @@ class SCADAServer(QObject):
         return all_packets
 
     def start_capture(self):
-        """Enable packet capture"""
+        """Enable packet capture (both simulated devices and real network traffic)"""
         self.capture_enabled = True
-        self.log_message.emit("Packet capture started")
+        self.log_message.emit("Packet capture started (simulated devices)")
+
+        # Also start real network traffic capture on selected interface
+        if SCAPY_AVAILABLE:
+            self.network_sniffer.start_sniffing(self.selected_network_interface)
+        else:
+            self.log_message.emit("⚠️ Scapy not installed - real network capture disabled")
+            self.log_message.emit("💡 Install scapy: pip install scapy")
 
     def stop_capture(self):
-        """Disable packet capture"""
+        """Disable packet capture (both simulated devices and real network traffic)"""
         self.capture_enabled = False
-        self.log_message.emit("Packet capture stopped")
+        self.log_message.emit("Packet capture stopped (simulated devices)")
+
+        # Also stop real network traffic capture
+        if self.network_sniffer.running:
+            self.network_sniffer.stop_sniffing()
+
+    def _on_network_packet_captured(self, packet_info: dict):
+        """Handle packets captured from real network traffic"""
+        # Only emit if capture is enabled
+        if self.capture_enabled:
+            self.packet_captured.emit(packet_info)
 
     def set_capture_device(self, device_id: str):
         """Set which device to capture packets from"""

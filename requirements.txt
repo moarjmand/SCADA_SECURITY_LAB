@@ -1,0 +1,14 @@
+# SCADA Network Risk Assessment System - Dependencies
+# Python 3.8+
+
+# GUI Framework
+PyQt6>=6.4.0
+
+# Network packet capture (for promiscuous mode and real network traffic capture)
+scapy>=2.5.0
+
+# System and network utilities
+psutil>=5.9.0
+
+# HTTP requests for NVD API
+requests>=2.28.0
