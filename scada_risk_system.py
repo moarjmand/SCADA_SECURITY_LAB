@@ -295,6 +295,11 @@ class BaseDevice:
         if self.scada_server and not self.scada_server.capture_enabled:
             return None
 
+        # Check if this device is selected for capture
+        if self.scada_server and self.scada_server.selected_capture_device != "All Devices":
+            if self.scada_server.selected_capture_device != self.device_id:
+                return None
+
         # Build complete packet with Ethernet/IP/TCP headers
         pcap_packet = b""
         if raw_data and remote_addr:
@@ -1157,6 +1162,7 @@ class SCADAServer(QObject):
         self.rtus: List[BaseDevice] = []
         self.running = False
         self.capture_enabled = False  # Packet capture paused by default
+        self.selected_capture_device = "All Devices"  # Which device to capture from
         self.data_history = deque(maxlen=1000)
         self.update_timer = None
         # Load NVD API key from environment
@@ -1304,6 +1310,20 @@ class SCADAServer(QObject):
         """Disable packet capture"""
         self.capture_enabled = False
         self.log_message.emit("Packet capture stopped")
+
+    def set_capture_device(self, device_id: str):
+        """Set which device to capture packets from"""
+        self.selected_capture_device = device_id
+        if device_id == "All Devices":
+            self.log_message.emit("Capturing packets from all devices")
+        else:
+            self.log_message.emit(f"Capturing packets from device: {device_id}")
+
+    def get_device_list(self) -> List[str]:
+        """Get list of all available devices for capture selection"""
+        device_list = ["All Devices"]
+        device_list.extend([rtu.device_id for rtu in self.rtus])
+        return device_list
 
 
 # ============================================================================
@@ -2627,6 +2647,15 @@ class PacketsTab(QWidget):
         control_group = QGroupBox("Packet Capture Controls")
         control_layout = QHBoxLayout()
 
+        # Device selector
+        control_layout.addWidget(QLabel("Capture Device:"))
+        self.device_selector = QComboBox()
+        self.device_selector.addItems(self.scada_server.get_device_list())
+        self.device_selector.currentTextChanged.connect(self.on_device_selected)
+        self.device_selector.setMinimumWidth(150)
+        control_layout.addWidget(self.device_selector)
+        control_layout.addWidget(QLabel("|"))  # Separator
+
         # Capture control buttons
         self.start_capture_btn = QPushButton("▶ Start Capture")
         self.start_capture_btn.clicked.connect(self.start_capture)
@@ -3009,6 +3038,24 @@ class PacketsTab(QWidget):
         self.capture_status_label.setText("🔴 Stopped")
         self.capture_status_label.setStyleSheet("color: red; font-weight: bold;")
 
+    def on_device_selected(self, device_id: str):
+        """Handle device selection change"""
+        self.scada_server.set_capture_device(device_id)
+
+    def refresh_device_list(self):
+        """Refresh the device selector dropdown"""
+        current_selection = self.device_selector.currentText()
+        self.device_selector.clear()
+        device_list = self.scada_server.get_device_list()
+        self.device_selector.addItems(device_list)
+
+        # Restore previous selection if it still exists
+        if current_selection in device_list:
+            self.device_selector.setCurrentText(current_selection)
+        else:
+            # Default to "All Devices" if previous selection no longer exists
+            self.device_selector.setCurrentText("All Devices")
+
     def first_page(self):
         """Go to first page"""
         self.current_page = 0
@@ -3239,6 +3286,9 @@ class PacketsTab(QWidget):
 
     def refresh_packets(self):
         """Refresh the packet table display"""
+        # Refresh the device list in case devices were added/removed
+        self.refresh_device_list()
+
         self.all_packets = self.scada_server.get_all_packets()
 
         # Apply filters
