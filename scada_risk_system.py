@@ -281,7 +281,6 @@ class NetworkPacketSniffer(QObject):
         self.sniffer_thread = threading.Thread(target=self._sniff_packets, daemon=True)
         self.sniffer_thread.start()
 
-        self.log_message.emit(f"✅ Started capturing ALL network traffic on {interface_name} in PROMISCUOUS mode")
         return True
 
     def stop_sniffing(self):
@@ -294,13 +293,15 @@ class NetworkPacketSniffer(QObject):
         """Map IP address or interface name to actual interface name"""
 
         # If it's "all" or "0.0.0.0", use None (capture on all interfaces)
-        if ip_or_name in ["0.0.0.0", "all"]:
+        if ip_or_name in ["0.0.0.0", "all", "All Interfaces"]:
+            self.log_message.emit("📡 Will capture on ALL network interfaces")
             return None
 
         # If it's already an interface name, return it
         if SCAPY_AVAILABLE:
             available_ifaces = get_if_list()
             if ip_or_name in available_ifaces:
+                self.log_message.emit(f"📡 Using interface: {ip_or_name}")
                 return ip_or_name
 
         # Try to find interface by IP address
@@ -310,17 +311,22 @@ class NetworkPacketSniffer(QObject):
                 for iface_name, addrs in net_if_addrs.items():
                     for addr in addrs:
                         if addr.family == socket.AF_INET and addr.address == ip_or_name:
+                            self.log_message.emit(f"📡 Mapped IP {ip_or_name} to interface: {iface_name}")
                             return iface_name
             except Exception as e:
                 logger.error(f"Error mapping IP to interface: {e}")
+                self.log_message.emit(f"❌ Error mapping IP {ip_or_name} to interface: {e}")
 
         # Try localhost special case
         if ip_or_name == "127.0.0.1":
             # Look for loopback interface
             for iface in ["lo", "lo0", "Loopback"]:
                 if SCAPY_AVAILABLE and iface in get_if_list():
+                    self.log_message.emit(f"📡 Using loopback interface: {iface}")
                     return iface
 
+        # If we couldn't map it, warn the user and use None (all interfaces)
+        self.log_message.emit(f"⚠️ Could not map '{ip_or_name}' to a specific interface, will capture on ALL interfaces")
         return None
 
     def _sniff_packets(self):
@@ -328,23 +334,27 @@ class NetworkPacketSniffer(QObject):
         try:
             # Configure scapy for promiscuous mode
             if self.interface:
-                self.log_message.emit(f"📡 Capturing on interface: {self.interface}")
+                self.log_message.emit(f"📡 Starting packet capture on interface: {self.interface}")
+                self.log_message.emit(f"🔓 PROMISCUOUS MODE ENABLED - Capturing ALL traffic on {self.interface}")
             else:
-                self.log_message.emit(f"📡 Capturing on ALL interfaces")
+                self.log_message.emit(f"📡 Starting packet capture on ALL network interfaces")
+                self.log_message.emit(f"🔓 PROMISCUOUS MODE ENABLED - Capturing ALL network traffic")
 
             # Start sniffing with promiscuous mode
             # prn = callback function for each packet
             # store = 0 to not store packets in memory (we process them immediately)
-            # promisc = 1 to enable promiscuous mode (capture ALL traffic)
+            # promisc = 1 to enable promiscuous mode (capture ALL traffic, not just traffic to/from this host)
+            # This allows seeing packets sent between other devices on the network segment
             sniff(
                 iface=self.interface,
                 prn=self._process_packet,
                 store=False,
-                promisc=True,  # PROMISCUOUS MODE - captures all network traffic
+                promisc=True,  # PROMISCUOUS MODE - captures ALL network traffic on the interface
                 stop_filter=lambda x: not self.running
             )
         except PermissionError:
             self.log_message.emit("❌ Permission denied - run as root/administrator for promiscuous mode")
+            self.log_message.emit("💡 Try: sudo python3 scada_risk_system.py")
         except Exception as e:
             self.log_message.emit(f"❌ Sniffer error: {e}")
             logger.error(f"Packet sniffer error: {e}")
@@ -1662,9 +1672,19 @@ class SCADAServer(QObject):
         return device_list
 
     def set_network_interface(self, interface_ip: str):
-        """Set which network interface to bind devices to"""
+        """Set which network interface to bind devices to and restart capture if running"""
+        old_interface = self.selected_network_interface
         self.selected_network_interface = interface_ip
         self.log_message.emit(f"Network interface set to: {interface_ip}")
+
+        # If sniffer is already running, restart it on the new interface
+        if self.network_sniffer.running and old_interface != interface_ip:
+            self.log_message.emit(f"⚠️ Restarting packet capture on new interface: {interface_ip}")
+            self.network_sniffer.stop_sniffing()
+            # Give it a moment to stop
+            time.sleep(0.5)
+            if self.capture_enabled:
+                self.network_sniffer.start_sniffing(interface_ip)
 
     def get_network_interface(self) -> str:
         """Get currently selected network interface"""
