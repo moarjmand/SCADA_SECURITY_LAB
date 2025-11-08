@@ -269,7 +269,10 @@ class NetworkPacketSniffer(QObject):
 
         # Map IP address to interface name
         interface_name = self._get_interface_name(interface)
-        if not interface_name:
+
+        # For "all interfaces" case, interface_name might be None on some platforms
+        # This is acceptable - scapy will use the default interface
+        if interface_name is None and interface not in ["0.0.0.0", "all"]:
             self.log_message.emit(f"❌ Could not find interface for IP: {interface}")
             return False
 
@@ -281,7 +284,14 @@ class NetworkPacketSniffer(QObject):
         self.sniffer_thread = threading.Thread(target=self._sniff_packets, daemon=True)
         self.sniffer_thread.start()
 
-        self.log_message.emit(f"✅ Started capturing ALL network traffic on {interface_name} in PROMISCUOUS mode")
+        if interface_name:
+            if interface_name == "any":
+                self.log_message.emit(f"✅ Started capturing ALL network traffic in PROMISCUOUS mode")
+            else:
+                self.log_message.emit(f"✅ Started capturing on {interface_name} in PROMISCUOUS mode")
+        else:
+            self.log_message.emit(f"✅ Started capturing on default interface in PROMISCUOUS mode")
+
         return True
 
     def stop_sniffing(self):
@@ -293,8 +303,21 @@ class NetworkPacketSniffer(QObject):
     def _get_interface_name(self, ip_or_name: str) -> Optional[str]:
         """Map IP address or interface name to actual interface name"""
 
-        # If it's "all" or "0.0.0.0", use None (capture on all interfaces)
+        # If it's "all" or "0.0.0.0", use platform-specific "any" interface
         if ip_or_name in ["0.0.0.0", "all"]:
+            # Try to use platform-specific "any" interface for capturing all traffic
+            if SCAPY_AVAILABLE:
+                available_ifaces = get_if_list()
+                # On Linux, "any" is a special pseudo-interface that captures on all interfaces
+                if "any" in available_ifaces:
+                    logger.info("Using 'any' interface for capturing all traffic")
+                    return "any"
+                # On some systems, try other common "all" interface names
+                for any_iface in ["any", "lo", "lo0"]:
+                    if any_iface in available_ifaces:
+                        logger.info(f"Using '{any_iface}' interface for capture")
+                        return any_iface
+            # Return None as fallback (will capture on default interface with warning)
             return None
 
         # If it's already an interface name, return it
@@ -327,10 +350,14 @@ class NetworkPacketSniffer(QObject):
         """Packet sniffing thread - captures with promiscuous mode enabled"""
         try:
             # Configure scapy for promiscuous mode
-            if self.interface:
+            if self.interface == "any":
+                self.log_message.emit(f"📡 Capturing on ALL interfaces using 'any' pseudo-interface")
+            elif self.interface:
                 self.log_message.emit(f"📡 Capturing on interface: {self.interface}")
             else:
-                self.log_message.emit(f"📡 Capturing on ALL interfaces")
+                # Fallback to default interface
+                self.log_message.emit(f"📡 Capturing on default interface (platform-specific)")
+                self.log_message.emit(f"💡 Tip: Select a specific interface for better results")
 
             # Start sniffing with promiscuous mode
             # prn = callback function for each packet
@@ -345,6 +372,8 @@ class NetworkPacketSniffer(QObject):
             )
         except PermissionError:
             self.log_message.emit("❌ Permission denied - run as root/administrator for promiscuous mode")
+            self.log_message.emit("💡 Linux/Mac: sudo python scada_risk_system.py")
+            self.log_message.emit("💡 Windows: Run terminal as Administrator")
         except Exception as e:
             self.log_message.emit(f"❌ Sniffer error: {e}")
             logger.error(f"Packet sniffer error: {e}")
@@ -1652,12 +1681,17 @@ class SCADAServer(QObject):
         self.selected_capture_device = device_id
         if device_id == "All Devices":
             self.log_message.emit("Capturing packets from all devices")
+        elif device_id == "NETWORK":
+            self.log_message.emit("Capturing real network traffic only")
         else:
             self.log_message.emit(f"Capturing packets from device: {device_id}")
 
     def get_device_list(self) -> List[str]:
         """Get list of all available devices for capture selection"""
         device_list = ["All Devices"]
+        # Add NETWORK option for filtering real network traffic
+        device_list.append("NETWORK")
+        # Add all simulated device IDs
         device_list.extend([rtu.device_id for rtu in self.rtus])
         return device_list
 
