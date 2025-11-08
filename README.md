@@ -74,11 +74,12 @@ This system provides a **comprehensive security testing platform** for **SCADA**
 <tr>
 <td width="50%">
 
-#### 🌐 **Network Simulation**
+#### 🌐 **Network Simulation & Capture**
 - Real network traffic generation
 - Authentic SCADA protocol packets
 - Multi-device orchestration
 - Real-time traffic statistics and packet capture
+- **Promiscuous mode packet capture** - captures ALL network traffic
 - Support for Modbus TCP, DNP3, S7comm, EtherNet/IP
 
 </td>
@@ -242,8 +243,10 @@ This system provides a **comprehensive security testing platform** for **SCADA**
 
 ```bash
 # Core dependencies
-PyQt6>=6.0.0
-requests>=2.25.0
+PyQt6>=6.4.0
+requests>=2.28.0
+scapy>=2.5.0        # For real network packet capture with promiscuous mode
+psutil>=5.9.0       # For network interface detection
 
 # Standard library (included with Python)
 socket, threading, time, random, json, struct
@@ -264,13 +267,25 @@ cd SCADA_SECURITY_LAB
 #### **Step 2: Install Dependencies**
 
 ```bash
-pip install PyQt6 requests
+# Option 1: Install from requirements.txt (recommended)
+pip install -r requirements.txt
+
+# Option 2: Install manually
+pip install PyQt6 requests scapy psutil
 ```
+
+> **Note for Network Capture**: On Linux/Mac, you may need to run with elevated privileges for promiscuous mode:
+> ```bash
+> sudo python scada_risk_system.py
+> ```
 
 #### **Step 3: Run the Application**
 
 ```bash
 python scada_risk_system.py
+
+# For full network capture capabilities (Linux/Mac):
+sudo python scada_risk_system.py
 ```
 
 > 💡 **Tip:** Use a virtual environment for cleaner dependency management!
@@ -311,6 +326,78 @@ python scada_risk_system.py
 | **Analysis Recommendations** | 📋 | Automated security recommendations and remediation guidance |
 | **AI Assessment** | 🤖 | AI-powered security analysis and vulnerability prediction |
 | **Attack Simulator** | ⚠️ | Simulate various attack scenarios for security testing |
+
+---
+
+## 📡 Real Network Packet Capture
+
+### 🎯 Promiscuous Mode Capture
+
+The system now supports **real network traffic capture** on any network interface, including wireless adapters. When enabled, the packet capture system operates in **promiscuous mode**, allowing it to capture **ALL packets** on the network segment, not just those destined for your host.
+
+### ✨ Key Features
+
+| Feature | Description |
+|---------|-------------|
+| 🌐 **All Interfaces** | Capture on any network interface (Ethernet, Wi-Fi, loopback) |
+| 📡 **Promiscuous Mode** | Captures ALL traffic on the network segment |
+| 🔍 **Protocol Detection** | Automatic identification of protocols (TCP/UDP/ICMP/ARP/DNS/HTTP/TLS) |
+| 🏭 **SCADA Protocol Recognition** | Detects Modbus, S7, DNP3, EtherNet/IP traffic |
+| 💾 **PCAP Export** | Export captured packets in standard PCAP format for analysis in Wireshark |
+| ⚡ **Real-time Display** | Live packet display with filtering and pagination |
+
+### 🚀 How to Use
+
+1. **Select Network Interface**: Choose the interface you want to capture on from the dropdown
+2. **Click "Start Capture"**: Begins capturing both simulated device traffic AND real network traffic
+3. **Monitor Packets**: View real-time packet capture in the Packets tab
+4. **Export**: Save captured packets to PCAP format for analysis
+
+### ⚙️ Network Interface Selection
+
+The interface selector allows you to choose which network interface to monitor:
+- 🔌 **Ethernet interfaces** (e.g., eth0, en0)
+- 📡 **Wireless interfaces** (e.g., wlan0, wlp3s0)
+- 🔄 **Loopback** (lo, lo0) - for local traffic
+- 🌐 **All interfaces** (0.0.0.0) - capture on all
+
+### 🔐 Permission Requirements
+
+> **⚠️ Important**: Promiscuous mode requires elevated privileges on most systems.
+
+**Linux/Mac:**
+```bash
+sudo python scada_risk_system.py
+```
+
+**Windows:**
+- Run terminal as Administrator
+- May require WinPcap or Npcap installed
+
+### 📦 Packet Information Captured
+
+For each packet, the system captures:
+- ⏰ **Timestamp** - Exact capture time
+- 📏 **Size** - Packet size in bytes
+- 🔀 **Addresses** - Source and destination IP:Port
+- 📋 **Protocol Stack** - Full protocol hierarchy (Ethernet/IP/TCP/HTTP)
+- 🏷️ **Device Type** - "Real Network Traffic" for live captures
+- 💾 **Raw Data** - Complete packet data for PCAP export
+
+### 🎯 Use Cases
+
+- **Network Monitoring**: Monitor all traffic on your network segment
+- **Security Analysis**: Detect suspicious traffic patterns
+- **Protocol Analysis**: Analyze SCADA protocol communications
+- **Troubleshooting**: Debug network connectivity issues
+- **Traffic Inspection**: Inspect packets with Wireshark after export
+
+### 💡 Tips
+
+- Use **filters** in the Packets tab to focus on specific protocols or addresses
+- **Export to PCAP** for detailed analysis in Wireshark
+- Combine with **IDS tab** for automated threat detection
+- Use **loopback interface** to capture only simulated device traffic
 
 ---
 
