@@ -24,6 +24,14 @@ from collections import deque
 from typing import Dict, List, Optional, Tuple
 import logging
 
+# Try to import psutil for network interface detection
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    logging.warning("psutil not available - network interface selection will use basic mode")
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QPushButton, QTextEdit, QTableWidget,
@@ -153,6 +161,78 @@ class NVDAPIClient:
 
 
 # ============================================================================
+# NETWORK INTERFACE UTILITIES
+# ============================================================================
+
+def get_network_interfaces() -> List[Dict[str, str]]:
+    """Get list of available network interfaces with their IP addresses"""
+    interfaces = []
+
+    if PSUTIL_AVAILABLE:
+        # Use psutil for comprehensive interface information
+        try:
+            net_if_addrs = psutil.net_if_addrs()
+            net_if_stats = psutil.net_if_stats()
+
+            for interface_name, addrs in net_if_addrs.items():
+                # Get interface status
+                is_up = net_if_stats[interface_name].isup if interface_name in net_if_stats else False
+
+                # Find IPv4 address
+                ipv4_addr = None
+                for addr in addrs:
+                    if addr.family == socket.AF_INET:
+                        ipv4_addr = addr.address
+                        break
+
+                # Add interface info
+                if ipv4_addr:
+                    interfaces.append({
+                        'name': interface_name,
+                        'ip': ipv4_addr,
+                        'status': 'UP' if is_up else 'DOWN'
+                    })
+        except Exception as e:
+            logger.error(f"Error getting network interfaces with psutil: {e}")
+
+    # Fallback: Use basic socket method
+    if not interfaces:
+        try:
+            # Add localhost
+            interfaces.append({
+                'name': 'lo (localhost)',
+                'ip': '127.0.0.1',
+                'status': 'UP'
+            })
+
+            # Try to get hostname IP
+            hostname = socket.gethostname()
+            try:
+                host_ip = socket.gethostbyname(hostname)
+                if host_ip != '127.0.0.1':
+                    interfaces.append({
+                        'name': f'{hostname}',
+                        'ip': host_ip,
+                        'status': 'UP'
+                    })
+            except:
+                pass
+
+            # Add all interfaces option
+            interfaces.append({
+                'name': 'all (0.0.0.0)',
+                'ip': '0.0.0.0',
+                'status': 'UP'
+            })
+        except Exception as e:
+            logger.error(f"Error getting network interfaces: {e}")
+            # Return default if all fails
+            interfaces = [{'name': 'all (0.0.0.0)', 'ip': '0.0.0.0', 'status': 'UP'}]
+
+    return interfaces
+
+
+# ============================================================================
 # BASE DEVICE CLASS
 # ============================================================================
 
@@ -178,14 +258,21 @@ class BaseDevice:
         }
         self.captured_packets = deque(maxlen=1000)  # Store last 1000 packets
         
+    def get_bind_address(self) -> str:
+        """Get the network interface IP to bind to"""
+        if self.scada_server and hasattr(self.scada_server, 'selected_network_interface'):
+            return self.scada_server.selected_network_interface
+        return self.ip
+
     def start(self):
         if not self.enabled or self.running:
             return
         self.running = True
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
-        logger.info(f"{self.device_type} {self.device_id} started on {self.ip}:{self.port}")
-        
+        bind_addr = self.get_bind_address()
+        logger.info(f"{self.device_type} {self.device_id} started on {bind_addr}:{self.port}")
+
     def stop(self):
         self.running = False
         if self.socket:
@@ -196,7 +283,7 @@ class BaseDevice:
         if self.thread:
             self.thread.join(timeout=2)
         logger.info(f"{self.device_type} {self.device_id} stopped")
-        
+
     def _run(self):
         pass
 
@@ -377,13 +464,14 @@ class ModbusRTU(BaseDevice):
         
     def _run(self):
         try:
+            bind_addr = self.get_bind_address()
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.bind((self.ip, self.port))
+            self.socket.bind((bind_addr, self.port))
             self.socket.listen(5)
             self.socket.settimeout(1.0)
-            
-            logger.info(f"Modbus server listening on {self.ip}:{self.port}")
+
+            logger.info(f"Modbus server listening on {bind_addr}:{self.port}")
             
             while self.running:
                 try:
@@ -518,13 +606,14 @@ class DNP3RTU(BaseDevice):
         
     def _run(self):
         try:
+            bind_addr = self.get_bind_address()
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.bind((self.ip, self.port))
+            self.socket.bind((bind_addr, self.port))
             self.socket.listen(5)
             self.socket.settimeout(1.0)
             
-            logger.info(f"DNP3 server listening on {self.ip}:{self.port}")
+            logger.info(f"DNP3 server listening on {bind_addr}:{self.port}")
             
             while self.running:
                 try:
@@ -617,13 +706,14 @@ class S7RTU(BaseDevice):
         
     def _run(self):
         try:
+            bind_addr = self.get_bind_address()
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.bind((self.ip, self.port))
+            self.socket.bind((bind_addr, self.port))
             self.socket.listen(5)
             self.socket.settimeout(1.0)
             
-            logger.info(f"S7 server listening on {self.ip}:{self.port}")
+            logger.info(f"S7 server listening on {bind_addr}:{self.port}")
             
             while self.running:
                 try:
@@ -710,13 +800,14 @@ class RockwellPLC(BaseDevice):
         
     def _run(self):
         try:
+            bind_addr = self.get_bind_address()
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.bind((self.ip, self.port))
+            self.socket.bind((bind_addr, self.port))
             self.socket.listen(5)
             self.socket.settimeout(1.0)
             
-            logger.info(f"EtherNet/IP server listening on {self.ip}:{self.port}")
+            logger.info(f"EtherNet/IP server listening on {bind_addr}:{self.port}")
             
             while self.running:
                 try:
@@ -812,13 +903,14 @@ class SchneiderModicon(BaseDevice):
         
     def _run(self):
         try:
+            bind_addr = self.get_bind_address()
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.bind((self.ip, self.port))
+            self.socket.bind((bind_addr, self.port))
             self.socket.listen(5)
             self.socket.settimeout(1.0)
             
-            logger.info(f"Modicon server listening on {self.ip}:{self.port}")
+            logger.info(f"Modicon server listening on {bind_addr}:{self.port}")
             
             while self.running:
                 try:
@@ -943,13 +1035,14 @@ class GEMultilin(BaseDevice):
         
     def _run(self):
         try:
+            bind_addr = self.get_bind_address()
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.bind((self.ip, self.port))
+            self.socket.bind((bind_addr, self.port))
             self.socket.listen(5)
             self.socket.settimeout(1.0)
             
-            logger.info(f"GE Multilin server listening on {self.ip}:{self.port}")
+            logger.info(f"GE Multilin server listening on {bind_addr}:{self.port}")
             
             while self.running:
                 try:
@@ -1007,9 +1100,10 @@ class HoneywellPLC(BaseDevice):
         
     def _run(self):
         try:
+            bind_addr = self.get_bind_address()
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.bind((self.ip, self.port))
+            self.socket.bind((bind_addr, self.port))
             self.socket.listen(5)
             self.socket.settimeout(1.0)
             
@@ -1058,9 +1152,10 @@ class MitsubishiPLC(BaseDevice):
         
     def _run(self):
         try:
+            bind_addr = self.get_bind_address()
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.bind((self.ip, self.port))
+            self.socket.bind((bind_addr, self.port))
             self.socket.listen(5)
             self.socket.settimeout(1.0)
             
@@ -1109,9 +1204,10 @@ class OmronPLC(BaseDevice):
         
     def _run(self):
         try:
+            bind_addr = self.get_bind_address()
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.bind((self.ip, self.port))
+            self.socket.bind((bind_addr, self.port))
             self.socket.listen(5)
             self.socket.settimeout(1.0)
             
@@ -1163,6 +1259,7 @@ class SCADAServer(QObject):
         self.running = False
         self.capture_enabled = False  # Packet capture paused by default
         self.selected_capture_device = "All Devices"  # Which device to capture from
+        self.selected_network_interface = "0.0.0.0"  # Network interface to bind to
         self.data_history = deque(maxlen=1000)
         self.update_timer = None
         # Load NVD API key from environment
@@ -1324,6 +1421,26 @@ class SCADAServer(QObject):
         device_list = ["All Devices"]
         device_list.extend([rtu.device_id for rtu in self.rtus])
         return device_list
+
+    def set_network_interface(self, interface_ip: str):
+        """Set which network interface to bind devices to"""
+        self.selected_network_interface = interface_ip
+        self.log_message.emit(f"Network interface set to: {interface_ip}")
+
+    def get_network_interface(self) -> str:
+        """Get currently selected network interface"""
+        return self.selected_network_interface
+
+    def get_network_interface_list(self) -> List[str]:
+        """Get list of available network interfaces"""
+        interfaces = get_network_interfaces()
+        # Return list of formatted strings for display
+        return [f"{iface['name']} ({iface['ip']})" for iface in interfaces]
+
+    def get_network_interface_ips(self) -> List[str]:
+        """Get list of network interface IPs only"""
+        interfaces = get_network_interfaces()
+        return [iface['ip'] for iface in interfaces]
 
 
 # ============================================================================
@@ -2656,6 +2773,16 @@ class PacketsTab(QWidget):
         control_layout.addWidget(self.device_selector)
         control_layout.addWidget(QLabel("|"))  # Separator
 
+        # Network interface selector
+        control_layout.addWidget(QLabel("Network Interface:"))
+        self.interface_selector = QComboBox()
+        self.interface_selector.addItems(self.scada_server.get_network_interface_list())
+        self.interface_selector.currentTextChanged.connect(self.on_interface_selected)
+        self.interface_selector.setMinimumWidth(200)
+        self.interface_selector.setToolTip("Select network interface to bind devices to")
+        control_layout.addWidget(self.interface_selector)
+        control_layout.addWidget(QLabel("|"))  # Separator
+
         # Capture control buttons
         self.start_capture_btn = QPushButton("▶ Start Capture")
         self.start_capture_btn.clicked.connect(self.start_capture)
@@ -3042,19 +3169,35 @@ class PacketsTab(QWidget):
         """Handle device selection change"""
         self.scada_server.set_capture_device(device_id)
 
+    def on_interface_selected(self, interface_text: str):
+        """Handle network interface selection change"""
+        # Extract IP from the formatted string "name (ip)"
+        if '(' in interface_text and ')' in interface_text:
+            # Extract IP from format "name (ip)"
+            ip = interface_text.split('(')[1].split(')')[0]
+        else:
+            ip = interface_text
+        self.scada_server.set_network_interface(ip)
+
     def refresh_device_list(self):
         """Refresh the device selector dropdown"""
         current_selection = self.device_selector.currentText()
         self.device_selector.clear()
         device_list = self.scada_server.get_device_list()
         self.device_selector.addItems(device_list)
-
         # Restore previous selection if it still exists
         if current_selection in device_list:
             self.device_selector.setCurrentText(current_selection)
-        else:
-            # Default to "All Devices" if previous selection no longer exists
-            self.device_selector.setCurrentText("All Devices")
+
+    def refresh_interface_list(self):
+        """Refresh the network interface selector dropdown"""
+        current_selection = self.interface_selector.currentText()
+        self.interface_selector.clear()
+        interface_list = self.scada_server.get_network_interface_list()
+        self.interface_selector.addItems(interface_list)
+        # Try to restore previous selection
+        if current_selection in interface_list:
+            self.interface_selector.setCurrentText(current_selection)
 
     def first_page(self):
         """Go to first page"""
