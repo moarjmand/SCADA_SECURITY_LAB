@@ -3037,15 +3037,6 @@ class PacketsTab(QWidget):
         control_group = QGroupBox("Packet Capture Controls")
         control_layout = QHBoxLayout()
 
-        # Device selector
-        control_layout.addWidget(QLabel("Capture Device:"))
-        self.device_selector = QComboBox()
-        self.device_selector.addItems(self.scada_server.get_device_list())
-        self.device_selector.currentTextChanged.connect(self.on_device_selected)
-        self.device_selector.setMinimumWidth(150)
-        control_layout.addWidget(self.device_selector)
-        control_layout.addWidget(QLabel("|"))  # Separator
-
         # Network interface selector
         control_layout.addWidget(QLabel("Network Interface:"))
         self.interface_selector = QComboBox()
@@ -3438,10 +3429,6 @@ class PacketsTab(QWidget):
         self.capture_status_label.setText("🔴 Stopped")
         self.capture_status_label.setStyleSheet("color: red; font-weight: bold;")
 
-    def on_device_selected(self, device_id: str):
-        """Handle device selection change"""
-        self.scada_server.set_capture_device(device_id)
-
     def on_interface_selected(self, interface_text: str):
         """Handle network interface selection change"""
         # Extract IP from the formatted string "name (ip)"
@@ -3451,16 +3438,6 @@ class PacketsTab(QWidget):
         else:
             ip = interface_text
         self.scada_server.set_network_interface(ip)
-
-    def refresh_device_list(self):
-        """Refresh the device selector dropdown"""
-        current_selection = self.device_selector.currentText()
-        self.device_selector.clear()
-        device_list = self.scada_server.get_device_list()
-        self.device_selector.addItems(device_list)
-        # Restore previous selection if it still exists
-        if current_selection in device_list:
-            self.device_selector.setCurrentText(current_selection)
 
     def refresh_interface_list(self):
         """Refresh the network interface selector dropdown"""
@@ -3702,9 +3679,6 @@ class PacketsTab(QWidget):
 
     def refresh_packets(self):
         """Refresh the packet table display"""
-        # Refresh the device list in case devices were added/removed
-        self.refresh_device_list()
-
         self.all_packets = self.scada_server.get_all_packets()
 
         # Apply filters
