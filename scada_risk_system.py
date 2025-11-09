@@ -268,12 +268,13 @@ class NetworkPacketSniffer(QObject):
             return False
 
         # Map IP address to interface name
+        # Note: interface_name can be None (for "All Interfaces") or a specific interface name
         interface_name = self._get_interface_name(interface)
-        if not interface_name:
+        if interface_name is False:  # Only error if explicitly False (not found)
             self.log_message.emit(f"❌ Could not find interface for IP: {interface}")
             return False
 
-        self.interface = interface_name
+        self.interface = interface_name  # Can be None for all interfaces
         self.running = True
         self.packet_count = 0
 
@@ -290,7 +291,12 @@ class NetworkPacketSniffer(QObject):
             self.log_message.emit(f"🛑 Stopped network capture. Total packets captured: {self.packet_count}")
 
     def _get_interface_name(self, ip_or_name: str) -> Optional[str]:
-        """Map IP address or interface name to actual interface name"""
+        """Map IP address or interface name to actual interface name.
+        Returns:
+            - None: Capture on all interfaces (valid option)
+            - str: Specific interface name
+            - False: Interface not found (error condition)
+        """
 
         # If it's "all" or "0.0.0.0", use None (capture on all interfaces)
         if ip_or_name in ["0.0.0.0", "all", "All Interfaces"]:
@@ -1486,7 +1492,7 @@ class SCADAServer(QObject):
         self.running = False
         self.capture_enabled = False  # Packet capture paused by default
         self.selected_capture_device = "All Devices"  # Which device to capture from
-        self.selected_network_interface = "0.0.0.0"  # Network interface to bind to
+        self.selected_network_interface = "All Interfaces"  # Network interface to bind to (default to all)
         self.data_history = deque(maxlen=1000)
         self.update_timer = None
         # Load NVD API key from environment
@@ -1632,8 +1638,16 @@ class SCADAServer(QObject):
             all_packets.extend(list(rtu.captured_packets))
         # Include packets from real network capture
         all_packets.extend(list(self.network_captured_packets))
-        # Sort by timestamp (most recent first)
-        all_packets.sort(key=lambda p: p['timestamp'], reverse=True)
+        # Sort by timestamp (most recent first) with validation
+        # Use datetime.min as default for packets without valid timestamp
+        try:
+            all_packets.sort(
+                key=lambda p: p.get('timestamp', datetime.min) if isinstance(p.get('timestamp'), datetime) else datetime.min,
+                reverse=True
+            )
+        except Exception as e:
+            logger.warning(f"Error sorting packets: {e}")
+            # If sort fails, return unsorted packets
         return all_packets
 
     def start_capture(self):
@@ -3782,6 +3796,7 @@ class PacketAnalysisTab(QWidget):
         self.scada_server = scada_server
         self.alerts = []  # Store detected alerts
         self.packet_history = deque(maxlen=10000)  # Keep history for analysis
+        self.seen_packet_ids = set()  # Track packet IDs for deduplication (O(1) lookup)
         self.device_stats = {}  # Per-device statistics
         self.connection_tracking = {}  # Track connections
         self.detection_enabled = True
@@ -3977,6 +3992,20 @@ class PacketAnalysisTab(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Export Failed", f"Failed to export alerts: {str(e)}")
 
+    def _get_packet_id(self, packet):
+        """Generate unique ID for packet based on key attributes (excluding timestamp)"""
+        # Use device_id, direction, size, addresses, and protocol_info to identify unique packets
+        return (
+            packet.get('device_id', ''),
+            packet.get('direction', ''),
+            packet.get('size', 0),
+            packet.get('local_addr', ''),
+            packet.get('remote_addr', ''),
+            packet.get('protocol_info', ''),
+            # Include timestamp string to differentiate packets with same attributes
+            str(packet.get('timestamp', ''))
+        )
+
     def analyze_packets(self):
         """Main analysis function - runs periodically"""
         if not self.detection_enabled:
@@ -3985,12 +4014,21 @@ class PacketAnalysisTab(QWidget):
         # Get all packets
         all_packets = self.scada_server.get_all_packets()
 
-        # Only analyze new packets since last check
+        # Only analyze new packets since last check using O(1) set lookup
         new_packets = []
         for packet in all_packets:
-            if packet not in self.packet_history:
+            packet_id = self._get_packet_id(packet)
+            if packet_id not in self.seen_packet_ids:
                 new_packets.append(packet)
                 self.packet_history.append(packet)
+                self.seen_packet_ids.add(packet_id)
+
+        # Prevent set from growing too large - keep it in sync with deque size
+        if len(self.seen_packet_ids) > 12000:  # Allow some buffer beyond maxlen
+            # Clear and rebuild from current packet_history
+            self.seen_packet_ids.clear()
+            for packet in self.packet_history:
+                self.seen_packet_ids.add(self._get_packet_id(packet))
 
         if not new_packets:
             return
@@ -4035,11 +4073,15 @@ class PacketAnalysisTab(QWidget):
                 })
 
     def detect_flooding(self, packets):
-        """Detect flooding attacks (DoS)"""
+        """Detect flooding attacks (DoS) - only for SCADA devices, not general network traffic"""
         current_time = time.time()
         device_packet_counts = {}
 
-        for packet in packets:
+        # Filter out general network traffic to avoid false positives
+        # Network traffic naturally has high packet counts
+        scada_packets = [p for p in packets if p.get('device_id') != 'NETWORK']
+
+        for packet in scada_packets:
             device_id = packet['device_id']
 
             if device_id not in device_packet_counts:
@@ -4184,8 +4226,11 @@ class PacketAnalysisTab(QWidget):
                 })
 
     def detect_unusual_ports(self, packets):
-        """Detect connections to non-standard SCADA ports"""
-        for packet in packets:
+        """Detect connections to non-standard SCADA ports - only for SCADA devices"""
+        # Filter out general network traffic which naturally uses many different ports
+        scada_packets = [p for p in packets if p.get('device_id') != 'NETWORK']
+
+        for packet in scada_packets:
             local_port_str = packet['local_addr'].split(':')[1] if ':' in packet['local_addr'] else '0'
             try:
                 local_port = int(local_port_str)
