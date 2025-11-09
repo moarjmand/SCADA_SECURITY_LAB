@@ -1497,6 +1497,9 @@ class SCADAServer(QObject):
         self.network_sniffer = NetworkPacketSniffer()
         self.network_sniffer.packet_captured.connect(self._on_network_packet_captured)
         self.network_sniffer.log_message.connect(self.log_message.emit)
+
+        # Storage for network-captured packets (separate from RTU simulated packets)
+        self.network_captured_packets = deque(maxlen=1000)
         
     def add_rtu(self, rtu: BaseDevice):
         rtu.scada_server = self  # Set reference to parent server
@@ -1622,10 +1625,13 @@ class SCADAServer(QObject):
                 break
 
     def get_all_packets(self) -> List[Dict]:
-        """Get all captured packets from all devices"""
+        """Get all captured packets from all devices and network sniffer"""
         all_packets = []
+        # Include packets from RTU simulated devices
         for rtu in self.rtus:
             all_packets.extend(list(rtu.captured_packets))
+        # Include packets from real network capture
+        all_packets.extend(list(self.network_captured_packets))
         # Sort by timestamp (most recent first)
         all_packets.sort(key=lambda p: p['timestamp'], reverse=True)
         return all_packets
@@ -1653,6 +1659,9 @@ class SCADAServer(QObject):
 
     def _on_network_packet_captured(self, packet_info: dict):
         """Handle packets captured from real network traffic"""
+        # Store the packet in network packet storage
+        self.network_captured_packets.append(packet_info)
+
         # Only emit if capture is enabled
         if self.capture_enabled:
             self.packet_captured.emit(packet_info)
@@ -3531,8 +3540,11 @@ class PacketsTab(QWidget):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
+            # Clear packets from RTU devices
             for rtu in self.scada_server.rtus:
                 rtu.captured_packets.clear()
+            # Clear packets from network sniffer
+            self.scada_server.network_captured_packets.clear()
             self.current_page = 0  # Reset to first page
             self.refresh_packets()
 
