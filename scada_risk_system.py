@@ -1693,8 +1693,10 @@ class SCADAServer(QObject):
     def get_network_interface_list(self) -> List[str]:
         """Get list of available network interfaces"""
         interfaces = get_network_interfaces()
-        # Return list of formatted strings for display
-        return [f"{iface['name']} ({iface['ip']})" for iface in interfaces]
+        # Return list of formatted strings for display, with "All Interfaces" as first option
+        interface_list = ["All Interfaces"]
+        interface_list.extend([f"{iface['name']} ({iface['ip']})" for iface in interfaces])
+        return interface_list
 
     def get_network_interface_ips(self) -> List[str]:
         """Get list of network interface IPs only"""
@@ -3417,13 +3419,16 @@ class PacketsTab(QWidget):
 
     def on_interface_selected(self, interface_text: str):
         """Handle network interface selection change"""
+        # Handle "All Interfaces" option
+        if interface_text == "All Interfaces":
+            self.scada_server.set_network_interface("All Interfaces")
         # Extract IP from the formatted string "name (ip)"
-        if '(' in interface_text and ')' in interface_text:
+        elif '(' in interface_text and ')' in interface_text:
             # Extract IP from format "name (ip)"
             ip = interface_text.split('(')[1].split(')')[0]
+            self.scada_server.set_network_interface(ip)
         else:
-            ip = interface_text
-        self.scada_server.set_network_interface(ip)
+            self.scada_server.set_network_interface(interface_text)
 
     def refresh_interface_list(self):
         """Refresh the network interface selector dropdown"""
