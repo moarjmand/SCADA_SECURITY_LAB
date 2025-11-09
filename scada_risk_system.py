@@ -494,7 +494,11 @@ class BaseDevice:
     def get_bind_address(self) -> str:
         """Get the network interface IP to bind to"""
         if self.scada_server and hasattr(self.scada_server, 'selected_network_interface'):
-            return self.scada_server.selected_network_interface
+            interface = self.scada_server.selected_network_interface
+            # Convert "All Interfaces" to 0.0.0.0 to bind to all network interfaces
+            if interface in ["All Interfaces", "all"]:
+                return "0.0.0.0"
+            return interface
         return self.ip
 
     def start(self):
